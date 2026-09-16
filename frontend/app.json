@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "PRAMAN",
+    "slug": "praman",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "web": {
+      "favicon": "./src/assets/praman-logo.png",
+      "name": "PRAMAN"
+    },
+    "splash": {
+      "backgroundColor": "#FFFFFF"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used to scan packaged commodity labels for compliance checking."
+      }
+    },
+    "android": {
+      "permissions": ["CAMERA"]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan product labels."
+        }
+      ]
+    ]
+  }
+}

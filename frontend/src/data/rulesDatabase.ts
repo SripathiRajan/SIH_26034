@@ -1,0 +1,221 @@
+import { Rule } from '../types';
+
+export const rulesDatabase: Rule[] = [
+  // ─── MANDATORY DECLARATIONS (Rule 6) ───────────────────────────────────────
+  {
+    id: 'r-rule6-1a',
+    section: 'Rule 6(1)(a)',
+    title: 'Name & Address of Manufacturer / Packer / Importer',
+    category: 'mandatory',
+    summary: 'Every package must carry the complete name and address of the manufacturer, packer or importer. For imports, country of origin is mandatory.',
+    fullText:
+      'Every package shall bear thereon the name and complete address of the manufacturer, or where the manufacturer is not the packer, the name and address of the manufacturer and packer and in case of any imported package the name and address of the importer.\n\nExplanation: Address shall contain flat/house number, street name, town/city, state, and pin code. A post box number alone is not sufficient.',
+    amendment: 'Amended 2017 & 2022 to clarify mandatory postal PIN code and importer address requirements. Notification G.S.R. 403(E).',
+    penalty: 'Non-compliance with Rule 6(1)(a) attracts penalty under Section 36 of the Legal Metrology Act, 2009 — fine up to ₹25,000 for first offence; ₹50,000 or imprisonment up to one year, or both, for subsequent offences.',
+    tags: ['Mandatory', 'Manufacturer', 'Importer', 'Address', 'Rule 6'],
+  },
+  {
+    id: 'r-rule6-1b',
+    section: 'Rule 6(1)(b)',
+    title: 'Generic or Common Name of Commodity',
+    category: 'mandatory',
+    summary: 'The common or generic name of the commodity must be clearly stated on the Principal Display Panel (PDP).',
+    fullText:
+      'The common or generic names of the commodity contained in the package and in case of packages with more than one product, the name and number or quantity of each product shall be mentioned on the principal display panel.\n\nThe name must be the common or generic name, not a brand name alone. E.g., "Biscuits" not just "Good Day".',
+    amendment: 'DoCA Notification 2021. Strengthened to require generic description visible from front.',
+    penalty: 'Subject to fine under Section 36 of the Legal Metrology Act, 2009.',
+    tags: ['Mandatory', 'Commodity Name', 'PDP', 'Rule 6'],
+  },
+  {
+    id: 'r-rule6-1c',
+    section: 'Rule 6(1)(c)',
+    title: 'Net Quantity Declaration in Standard SI Units',
+    category: 'mandatory',
+    summary: 'Net quantity in standard SI unit of weight, measure or number must be declared using correct symbols.',
+    fullText:
+      'The net quantity, in terms of standard unit of weight or measure or number, contained in the package shall be declared.\n\nMass → grams (g) or kilograms (kg)\nVolume → millilitres (ml) or litres (l)\nLength → metres (m) or centimetres (cm)\n\nSymbols must follow standard lowercase SI notation. Prohibited non-standard symbols: "gms", "ML", "Kgs", "ltr", "cc". Use of period as decimal separator (e.g. 250.5 ml) is mandatory.',
+    amendment: 'Legal Metrology (Packaged Commodities) Amendment Rules, 2021. Symbol usage strictly enforced.',
+    penalty: 'Fine up to ₹10,000 under Section 36, LMA 2009.',
+    tags: ['Mandatory', 'Net Quantity', 'Units', 'SI Symbols', 'Rule 6'],
+  },
+  {
+    id: 'r-rule6-1d',
+    section: 'Rule 6(1)(d)',
+    title: 'Month & Year of Manufacture / Packing / Import',
+    category: 'mandatory',
+    summary: 'Month and year of manufacture/packing/import must be printed in numbers or abbreviated month name.',
+    fullText:
+      'The month and year in which the commodity is manufactured or pre-packed or imported shall be declared in numbers (e.g. 09/2026 or Sep 2026).\n\nFor food products, cosmetics and seeds, expiry or "Best Before" date must also be clearly declared.\n\nThe words used must be: "Mfg Date", "Manufactured in", "Packed in", "Imported in" or equivalent in Hindi.\n\nThe date must be clearly legible and not embossed/debossed in a way that prevents reading.',
+    amendment: 'Amended 2022. Best Before now mandatory for processed food products.',
+    penalty: 'Penalty under Section 36. Smudged or illegible dates are treated as missing declarations.',
+    tags: ['Mandatory', 'Mfg Date', 'Expiry', 'Best Before', 'Rule 6'],
+  },
+  {
+    id: 'r-rule6-1e',
+    section: 'Rule 6(1)(e)',
+    title: 'Maximum Retail Price (MRP) & Unit Sale Price (USP)',
+    category: 'mrp',
+    summary: 'MRP inclusive of all taxes must be declared. From Jan 2022, Unit Sale Price (USP) is also mandatory.',
+    fullText:
+      'The Maximum Retail Price (MRP) inclusive of all taxes shall be declared in Indian Rupees in the format: "MRP ₹ xx.xx (incl. of all taxes)" or "MRP Rs. xx.xx (Incl. of all taxes)".\n\nEffective 1st January 2022 (G.S.R. 779(E)): Unit Sale Price (USP) in Rupees per g/kg/ml/l/piece must be declared alongside MRP for pre-packaged commodities.\n\nFormat: "Unit Sale Price: ₹ x.xx per g" or equivalent.\n\nThe MRP must be printed on the package itself — not only on stickers that can be removed. MRP stickers must not be tampered with.',
+    amendment: 'G.S.R. 779(E) dated 2nd November 2021 (effective Jan 1, 2022) — Unit Sale Price made mandatory. Sticker tampering provisions added in 2023.',
+    penalty: 'Selling above MRP is an offence under Section 18, LMA 2009. Fine up to ₹1,00,000 and/or imprisonment.',
+    tags: ['Mandatory', 'MRP', 'Taxes', 'Unit Sale Price', 'USP', 'Rule 6'],
+  },
+  {
+    id: 'r-rule6-1f',
+    section: 'Rule 6(1)(f)',
+    title: 'Best Before / Expiry Date (Use By Date)',
+    category: 'mandatory',
+    summary: 'For commodities that become unfit for consumption after a period, "Best Before" or "Use By" date must be declared.',
+    fullText:
+      'Where the commodity is likely to deteriorate or become less fit for human consumption within a period declared by the concerned regulation, such as food products or cosmetics, the package shall bear either:\n(i) "Best before …………" with the month and year, or\n(ii) "Use by …………" with the month and year.\n\nThe date should be displayed prominently. For products with shelf life up to 3 months, day-month-year format is preferred.',
+    amendment: 'Rule amended 2019. Food Safety regulations cross-applicable via FSSAI notifications.',
+    penalty: 'Selling after expiry date: criminal liability. Non-declaration: penalty under Section 36, LMA 2009.',
+    tags: ['Mandatory', 'Best Before', 'Expiry', 'Food Safety', 'Rule 6'],
+  },
+  {
+    id: 'r-rule6-1g',
+    section: 'Rule 6(1)(g)',
+    title: 'Consumer Care Contact Details',
+    category: 'consumer-care',
+    summary: 'Name, address, telephone number AND email address of the consumer grievance contact are all mandatory.',
+    fullText:
+      'Every package shall bear the name, address, telephone number and e-mail address of the person who or the office which can be contacted in case of consumer complaints.\n\nAll four elements are mandatory:\n1. Name or designation of the responsible person / department\n2. Complete postal address (not a PO Box alone)\n3. Telephone number (toll-free or regular with STD code)\n4. Email address\n\nAll details must be legible and accurate.',
+    amendment: 'Amended 2017 to add mandatory email address. 2022: Toll-free helpline strongly recommended for national brands.',
+    penalty: 'Fine under Section 36, LMA 2009 for non-compliance with any of the four required elements.',
+    tags: ['Mandatory', 'Consumer Care', 'Complaints', 'Email', 'Phone', 'Rule 6'],
+  },
+  {
+    id: 'r-rule6-1m',
+    section: 'Rule 6(1)(m)',
+    title: 'Country of Origin for Imported Packaged Goods',
+    category: 'mandatory',
+    summary: 'Country of origin must be declared conspicuously on imported packages.',
+    fullText:
+      'On every imported package, the name of the country of origin or manufacture or assembly shall be mentioned conspicuously in English or Hindi.\n\nFormats: "Made in China", "Product of USA", "Assembled in India from imported components".\n\nThe declaration must appear on the principal display panel or the information panel in a font size not less than that required for MRP.',
+    amendment: 'Mandatory enforcement notification 2020. Reiterated under Public Procurement Order for Government purchases.',
+    penalty: 'Import without proper origin marking is an offence under Customs Act and Legal Metrology Act.',
+    tags: ['Mandatory', 'Country of Origin', 'Imports', 'Rule 6'],
+  },
+  // ─── PACKAGING RULES ──────────────────────────────────────────────────────
+  {
+    id: 'r-rule4',
+    section: 'Rule 4',
+    title: 'Packages Not to Contain Less Than Declared Quantity',
+    category: 'packaging',
+    summary: 'No package shall contain less than the declared net quantity. Permissible variations only apply to unavoidable causes.',
+    fullText:
+      'No pre-packaged commodity shall contain a net quantity less than the declared quantity on the label.\n\nPermissible variations (tolerances) are defined in the Schedule to the Rules and apply only when the deviation is due to loss of moisture or other natural causes after packaging.\n\nFor commodities sold by number (e.g., tablets, biscuits), exact count must match declaration.\n\nShortweight packages may be seized under Section 15, LMA 2009.',
+    amendment: 'Schedule updated 2019 to revise tolerances for specific product categories.',
+    penalty: 'Shortweight offence under Section 15/36 LMA — fine up to ₹10,000 + forfeiture of goods.',
+    tags: ['Net Quantity', 'Shortweight', 'Tolerance', 'Rule 4'],
+  },
+  {
+    id: 'r-rule5',
+    section: 'Rule 5',
+    title: 'Obligations of Packer / Importer',
+    category: 'packaging',
+    summary: 'The packer or importer bears primary legal responsibility for all declarations on the package.',
+    fullText:
+      'The packer or importer of a pre-packaged commodity shall be responsible for ensuring that every package bears all the declarations required under these rules.\n\nThe packer shall maintain records of:\n- Net weight verification at filling\n- Batch numbers and lot identifiers\n- Date of packing\n\nUpon demand by a Legal Metrology officer, such records must be produced within 48 hours.',
+    amendment: 'Rule 5 amended 2021 to include importer record-keeping obligations.',
+    penalty: 'Failure to produce records: fine under Section 36, LMA 2009.',
+    tags: ['Packer Obligation', 'Records', 'Batch', 'Rule 5'],
+  },
+  {
+    id: 'r-rule7',
+    section: 'Rule 7',
+    title: 'Special Provisions for Food & Beverages',
+    category: 'mandatory',
+    summary: 'Additional mandatory declarations required for food products including ingredients, nutritional info, and FSSAI licence.',
+    fullText:
+      'Packages of food commodities shall, in addition to the declarations required under Rule 6, bear:\n(a) List of ingredients in descending order of weight\n(b) Nutritional information per 100g/100ml serving\n(c) Name and licence number of the FSSAI authority\n(d) Veg / Non-veg logo (green dot or brown/red dot) in prescribed size\n(e) Any allergen declaration as required under FSSAI regulations\n\nFor beverages containing more than 0.5% alcohol, the statutory warning must be printed.',
+    amendment: 'Cross-referenced with FSSAI (Food Safety and Standards) Regulations 2011 and subsequent amendments.',
+    penalty: 'Compounded violation — both Legal Metrology Act and Food Safety Act penalties may apply.',
+    tags: ['Food', 'Beverages', 'Ingredients', 'FSSAI', 'Nutritional Info', 'Rule 7'],
+  },
+  {
+    id: 'r-rule9',
+    section: 'Rule 9',
+    title: 'Multi-Piece / Combo Packages',
+    category: 'packaging',
+    summary: 'Multi-piece packages must declare total quantity, individual piece quantity, and number of pieces.',
+    fullText:
+      'Where a package contains a number of individual pieces or separate items, the total net quantity of the package shall be declared as well as the quantity of each individual piece/item and the number of such pieces/items.\n\nExample: "Pack of 5 × 100 g = 500 g Net"\n\nEach individual piece inside shall be labelled separately unless the outer pack is tamper-evident.\n\nFor multi-packs with separate MRPs on individual pieces, the outer MRP must equal or be less than the sum of individual MRPs.',
+    amendment: 'Circular 2018 clarified combo-pack MRP computation.',
+    penalty: 'Non-declaration of individual piece count: fine under Rule 9 read with Section 36 LMA.',
+    tags: ['Multi-Piece', 'Combo Pack', 'Bundle', 'Rule 9'],
+  },
+  {
+    id: 'r-rule14',
+    section: 'Rule 14',
+    title: 'Wholesale Packages & Industrial Supply',
+    category: 'packaging',
+    summary: 'Packages sold at wholesale (not retail) have different labelling requirements — MRP not mandatory but other declarations are.',
+    fullText:
+      'A wholesale package (sold to traders and not directly to consumers) need not bear the MRP but must declare:\n- Net quantity\n- Name of manufacturer/packer\n- Batch number\n- Date of packing\n\nWholesale packages must be distinguishable from retail packages by clear marking: "NOT FOR RETAIL SALE" or "For Industrial Use Only".\n\nSale of wholesale-labelled packages directly to consumers is prohibited.',
+    amendment: 'Rule 14 amended 2019.',
+    penalty: 'Supplying wholesale packages at retail without proper MRP declaration: offence under Section 36.',
+    tags: ['Wholesale', 'Bulk', 'Industrial', 'B2B', 'Rule 14'],
+  },
+  // ─── FONT SIZE & READABILITY ──────────────────────────────────────────────
+  {
+    id: 'r-rule11',
+    section: 'Rule 11 — Schedule II Table 1',
+    title: 'Minimum Height of Numerals & Letters (Font Size)',
+    category: 'font-size',
+    summary: 'Mandatory minimum font height requirements based on Principal Display Panel (PDP) surface area.',
+    fullText:
+      'Minimum height of numerals and letters for all mandatory declarations:\n\n┌─────────────────────┬──────────────────────────┬──────────────────────────────┐\n│ PDP Area            │ General Declarations      │ Net Qty / MRP Declarations   │\n├─────────────────────┼──────────────────────────┼──────────────────────────────┤\n│ ≤ 50 cm²            │ 1.0 mm minimum height     │ 0.5 mm (qty on small packs)  │\n│ 50–100 cm²          │ 1.5 mm minimum height     │ 1.5 mm                       │\n│ 100–500 cm²         │ 2.0 mm minimum height     │ 2.5 mm for MRP/Qty           │\n│ > 500 cm²           │ 4.0 mm minimum height     │ 6.0 mm for MRP/Qty           │\n└─────────────────────┴──────────────────────────┴──────────────────────────────┘\n\nNote: These are minimum heights. Contrast ratio must allow clear readability under normal retail lighting. Dark text on dark background is a violation even if font size is adequate.',
+    amendment: 'Legal Metrology (Packaged Commodities) Rules, 2011 Schedule II. No subsequent amendment to the table values — original 2011 numbers still in force.',
+    penalty: 'Sub-standard font size treated as "not declared" under Rule 6 — penalty under Section 36 LMA.',
+    tags: ['Font Size', 'Readability', 'PDP Area', 'Rule 11', 'Minimum Height', 'mm'],
+  },
+  {
+    id: 'r-rule11-contrast',
+    section: 'Rule 11(2)',
+    title: 'Colour Contrast & Legibility of Declarations',
+    category: 'font-size',
+    summary: 'Declarations must be clear, conspicuous and indelible. Embossed or debossed text without adequate contrast is non-compliant.',
+    fullText:
+      'All mandatory declarations under Rule 6 shall be —\n(a) in English or Hindi;\n(b) legible and clear;\n(c) indelible (not capable of being erased under ordinary conditions of handling);\n(d) not obscured by design, illustration or another printed matter;\n(e) printed in colour that provides adequate contrast with the background.\n\nEmbossed declarations without a contrasting colour fill are not acceptable as a substitute for printed text under normal retail lighting conditions.',
+    amendment: 'Interpretation circular 2022 — confirms embossed-only text does not meet legibility standard.',
+    penalty: 'Illegible declarations treated as missing: penalty under Section 36 LMA.',
+    tags: ['Contrast', 'Legibility', 'Colour', 'Indelible', 'Rule 11'],
+  },
+  // ─── PENALTY PROVISIONS ───────────────────────────────────────────────────
+  {
+    id: 'r-sec36',
+    section: 'Section 36 — LMA 2009',
+    title: 'Penalty for Contravention of Rules',
+    category: 'penalty',
+    summary: 'Fine up to ₹25,000 for first offence; fine up to ₹50,000 or imprisonment up to 1 year, or both, for subsequent offences.',
+    fullText:
+      'Any person who contravenes any provision of the rules made under this Act for which no specific penalty is elsewhere provided shall be punished with —\n(a) Fine up to ₹25,000 for first offence;\n(b) Fine up to ₹50,000, or imprisonment not exceeding one year, or both, for second and subsequent offences.\n\nIn addition, any article or thing in respect of which the offence was committed may be directed to be forfeited to the Government.',
+    penalty: 'Section 36 is the general penalty provision of the Legal Metrology Act, 2009.',
+    tags: ['Penalty', 'Fine', 'Section 36', 'LMA 2009', 'Imprisonment', 'Forfeiture'],
+  },
+  {
+    id: 'r-sec18',
+    section: 'Section 18 — LMA 2009',
+    title: 'Penalty for Sale Above MRP',
+    category: 'penalty',
+    summary: 'Selling any commodity above its declared Maximum Retail Price is a serious offence with higher penalties.',
+    fullText:
+      'No person shall sell any pre-packaged commodity at a price exceeding the Maximum Retail Price declared on the package.\n\nPenalty: Fine which may extend to ₹1,00,000, or imprisonment for a term not exceeding one year, or both.\n\nFor corporate offenders, the company and every director / manager / officer in charge of the business is deemed guilty.',
+    penalty: 'Fine up to ₹1,00,000 + imprisonment up to 1 year under Section 18 LMA 2009.',
+    tags: ['MRP Violation', 'Section 18', 'Overpricing', 'Penalty', 'LMA 2009'],
+  },
+  {
+    id: 'r-sec38',
+    section: 'Section 38 — LMA 2009',
+    title: 'Compounding of Offences',
+    category: 'penalty',
+    summary: 'Certain minor offences may be compounded (settled) by the Director / Controller of Legal Metrology.',
+    fullText:
+      'Any offence which is punishable under this Act with a fine only may, on the application of the accused person, be compounded by the Director, Government of India, or the Controller, State Government, as the case may be, for a sum not exceeding the maximum fine specified for such offence.\n\nCompounding is not allowed for repeat offences or where a prior compounding has been made within the preceding three years for a similar offence.',
+    penalty: 'Compounding fee = up to the maximum fine applicable for the specific offence.',
+    tags: ['Compounding', 'Settlement', 'Minor Offence', 'Section 38', 'LMA 2009'],
+  },
+];

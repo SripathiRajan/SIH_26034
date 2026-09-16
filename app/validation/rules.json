@@ -1,0 +1,69 @@
+{
+  "version": "2011.1",
+  "name": "Legal Metrology (Packaged Commodities) Rules, 2011",
+  "rules": [
+    {
+      "id": "RULE_6_1_E_MRP",
+      "field": "mrp",
+      "ruleRef": "Rule 6(1)(e)",
+      "mandatory": true,
+      "description": "Retail sale price of the package shall be declared including all taxes, in Rs. or ₹.",
+      "conditions": {
+        "requireInclusiveOfTaxes": true,
+        "minAmount": 0.01
+      },
+      "failureSeverity": "fail"
+    },
+    {
+      "id": "RULE_6_1_F_NET_QUANTITY",
+      "field": "net_quantity",
+      "ruleRef": "Rule 6(1)(f) & Schedule 2",
+      "mandatory": true,
+      "description": "Net quantity in terms of standard unit of weight or measure or number.",
+      "conditions": {
+        "allowedUnits": ["g", "kg", "ml", "l", "ltr", "m", "cm", "u", "n", "units"]
+      },
+      "failureSeverity": "fail"
+    },
+    {
+      "id": "RULE_6_1_A_MANUFACTURER",
+      "field": "manufacturer_details",
+      "ruleRef": "Rule 6(1)(a)",
+      "mandatory": true,
+      "description": "Name and complete address of the manufacturer, packer, or importer.",
+      "conditions": {
+        "minLength": 5
+      },
+      "failureSeverity": "warning"
+    },
+    {
+      "id": "RULE_6_1_D_DATE",
+      "field": "date_of_packing",
+      "ruleRef": "Rule 6(1)(d)",
+      "mandatory": true,
+      "description": "Month and year in which the commodity is manufactured, packed or imported.",
+      "conditions": {},
+      "failureSeverity": "warning"
+    },
+    {
+      "id": "RULE_6_1_H_CONSUMER_CARE",
+      "field": "consumer_care",
+      "ruleRef": "Rule 6(1)(h)",
+      "mandatory": true,
+      "description": "Name, address, telephone number and e-mail address of the person/office to be contacted in case of consumer complaints.",
+      "conditions": {
+        "requireEmailOrPhone": true
+      },
+      "failureSeverity": "fail"
+    },
+    {
+      "id": "RULE_6_1_B_COUNTRY_ORIGIN",
+      "field": "country_of_origin",
+      "ruleRef": "Rule 6(1)(b) [Amendment 2020]",
+      "mandatory": false,
+      "description": "Country of origin mandatory for imported commodities.",
+      "conditions": {},
+      "failureSeverity": "warning"
+    }
+  ]
+}

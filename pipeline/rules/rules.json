@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "regulation": "Legal Metrology (Packaged Commodities) Rules, 2011 + FSSAI Licensing Regulations 2011",
+  "fields": {
+    "net_quantity": {
+      "label": "Net Quantity",
+      "rule_ref": "LM Rule §6(1)(a)",
+      "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(a)",
+      "rule_explanation": "Net quantity must be declared in standard metric units (g, kg, ml, L). Font size must be proportional to principal display panel area.",
+      "pass_condition": "Found with valid numeric value and standard unit",
+      "fail_condition": "Completely absent from all visible panels",
+      "warning_condition": "Detected on package flap/bottom (flap pointer found)",
+      "penalty": "Fine up to Rs. 25,000 for first offence"
+    },
+    "mrp": {
+      "label": "Maximum Retail Price (MRP)",
+      "rule_ref": "LM Rule §6(1)(f)",
+      "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(f)",
+      "rule_explanation": "MRP must be declared inclusive of all taxes. Format: 'MRP (Incl. of all taxes) Rs. X' or '₹ X'. Must appear on principal display panel.",
+      "pass_condition": "MRP found with Rs./₹ symbol and numeric value",
+      "fail_condition": "MRP not found on any visible panel",
+      "warning_condition": "MRP pointed to package flap/bottom",
+      "penalty": "Fine up to Rs. 50,000 and/or imprisonment up to 1 year for repeat offence"
+    },
+    "manufacturer": {
+      "label": "Manufacturer / Packer Name & Address",
+      "rule_ref": "LM Rule §6(1)(b)",
+      "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(b)",
+      "rule_explanation": "Complete name and address of manufacturer, packer, or importer must appear on the principal display panel.",
+      "pass_condition": "'Manufactured by', 'Packed by', 'Marketed by', or 'Imported by' found with name",
+      "fail_condition": "No manufacturer/packer declaration found",
+      "warning_condition": "Partial address detected",
+      "penalty": "Fine up to Rs. 25,000"
+    },
+    "manufacture_date": {
+      "label": "Month & Year of Manufacture",
+      "rule_ref": "LM Rule §6(1)(d)",
+      "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(d)",
+      "rule_explanation": "Month and year of manufacture, packing, or import must be declared. Acceptable formats: MM/YYYY, Month YYYY.",
+      "pass_condition": "MFG date found in valid date format",
+      "fail_condition": "No manufacture date found",
+      "warning_condition": "Date found on package flap/bottom",
+      "penalty": "Fine up to Rs. 25,000"
+    },
+    "use_by": {
+      "label": "Best Before / Use By / Expiry Date",
+      "rule_ref": "LM Rule §6(1)(e)",
+      "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(e)",
+      "rule_explanation": "Best before or use-by date is mandatory for perishable and packaged food items.",
+      "pass_condition": "Expiry/BBD date found in valid format",
+      "fail_condition": "No expiry or best-before date found",
+      "warning_condition": "Expiry date found on package flap/bottom",
+      "penalty": "Fine up to Rs. 25,000"
+    },
+    "consumer_care": {
+      "label": "Consumer Care Details",
+      "rule_ref": "LM Rule §6(1)(g)",
+      "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(g)",
+      "rule_explanation": "Consumer care contact — phone number (preferably toll-free) or email — must appear on the package.",
+      "pass_condition": "Phone number or email address found associated with consumer/customer/helpline keyword",
+      "fail_condition": "No consumer care contact found",
+      "warning_condition": "Contact found but without consumer-care keyword context",
+      "penalty": "Fine up to Rs. 25,000"
+    },
+    "fssai": {
+      "label": "FSSAI License Number",
+      "rule_ref": "FSSAI §2.1",
+      "rule_citation": "Food Safety and Standards (Licensing and Registration of Food Businesses) Regulations, 2011 — Regulation 2.1",
+      "rule_explanation": "All food business operators must display their 14-digit FSSAI license/registration number on every package.",
+      "pass_condition": "14-digit FSSAI number found",
+      "fail_condition": "No valid 14-digit FSSAI number found",
+      "warning_condition": "Partial FSSAI reference found without full 14-digit number",
+      "penalty": "Fine up to Rs. 5 lakh and/or licence cancellation"
+    },
+    "country_of_origin": {
+      "label": "Country of Origin",
+      "rule_ref": "LM Rule §6(1)(c)",
+      "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(c)",
+      "rule_explanation": "Country of origin must be declared. For India: 'Made in India' or 'Manufactured in India'.",
+      "pass_condition": "'Made in', 'Manufactured in', 'Product of', 'Country of Origin' found",
+      "fail_condition": "No country of origin declaration found",
+      "warning_condition": "Not applicable — either found or missing",
+      "penalty": "Fine up to Rs. 25,000"
+    }
+  }
+}
