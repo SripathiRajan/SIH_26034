@@ -25,3 +25,12 @@ pydantic-settings>=2.0.0
 slowapi>=0.1.9
 pytest>=8.0.0
 alembic>=1.13.0
+pypdf>=4.0.0
+
+# Gazette PDF RAG Knowledge Base & LLM
+pymupdf>=1.24.0               # fitz — Devanagari/Hindi-safe PDF extraction
+faiss-cpu>=1.8.0              # activates real FAISS vector search
+sentence-transformers>=3.0.0  # multilingual MiniLM (Hindi + English)
+google-genai>=0.1.1           # Official Google GenAI Python SDK
+httpx>=0.27.0                 # Groq OpenAI-compatible chat completions client
+

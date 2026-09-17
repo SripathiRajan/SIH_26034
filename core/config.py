@@ -59,8 +59,23 @@ COMPLIANCE_PASS_THRESHOLD = 85.0
 # Database
 DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'praman.db')}")
 
+# Gemini LLM Integration
+# Reads GEMINI_API_KEY from environment or .env securely without logging
+GEMINI_API_KEY = (
+    os.environ.get("GEMINI_API_KEY")
+    or os.environ.get("GOOGLE_API_KEY")
+    or os.environ.get("API_KEY")
+)
+
+# Groq LLM Integration (OpenAI-compatible endpoint, primary chatbot provider)
+# Reads GROQ_API_KEY from environment or .env securely without logging
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_API_BASE = os.environ.get("GROQ_API_BASE", "https://api.groq.com/openai/v1")
+
 # JWT Auth & Security
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
+
 SECRET_KEY = os.environ.get("PRAMAN_SECRET_KEY", "praman-dev-secret-CHANGE-IN-PROD")
 if ENVIRONMENT == "production" and SECRET_KEY == "praman-dev-secret-CHANGE-IN-PROD":
     raise ValueError("PRAMAN_SECRET_KEY must be configured with a secure random key when ENVIRONMENT=production")

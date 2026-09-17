@@ -19,6 +19,8 @@ interface Message {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: string;
+  citations?: string[];
+  llmGenerated?: boolean;
 }
 
 /* SVG Vector Icons */
@@ -167,10 +169,10 @@ export default function ChatScreen() {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  // Send message flow
+  // Send message flow: backend RAG chatbot first, canned engine as offline fallback
   const handleSendMessage = (textToSend?: string) => {
     const text = (textToSend !== undefined ? textToSend : input).trim();
-    if (!text) return;
+    if (!text || isTyping) return;
 
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -186,19 +188,39 @@ export default function ChatScreen() {
     setInput('');
     setIsTyping(true);
 
-    setTimeout(() => {
-      const replyText = getAssistantAnswer(text);
-      const replyTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const assistantMsg: Message = {
-        id: `a-${Date.now()}`,
-        sender: 'assistant',
-        text: replyText,
-        timestamp: replyTime,
-      };
+    const replyTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      setMessages((prev) => [...prev, assistantMsg]);
-      setIsTyping(false);
-    }, 1000);
+    api
+      .askAssistant(text)
+      .then(({ answer, sources, llmGenerated }) => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `a-${Date.now()}`,
+            sender: 'assistant',
+            text: answer,
+            timestamp: replyTime,
+            citations: sources,
+            llmGenerated,
+          },
+        ]);
+        setIsTyping(false);
+      })
+      .catch(() => {
+        // Backend unreachable — statutory canned answers keep the assistant usable offline
+        const replyText = getAssistantAnswer(text);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `a-${Date.now()}`,
+            sender: 'assistant',
+            text: replyText,
+            timestamp: replyTime,
+            llmGenerated: false,
+          },
+        ]);
+        setIsTyping(false);
+      });
   };
 
   // Copy text to clipboard
@@ -283,6 +305,19 @@ export default function ChatScreen() {
                     </Text>
                   </View>
 
+                  {/* Statutory citations from the RAG knowledge base */}
+                  {!isUser && msg.citations && msg.citations.length > 0 && (
+                    <View style={styles.citationRow}>
+                      {msg.citations.slice(0, 3).map((cite, ci) => (
+                        <View key={`${msg.id}-cite-${ci}`} style={styles.citationChip}>
+                          <Text style={styles.citationText} numberOfLines={1}>
+                            {cite}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
                   {/* Timestamp & Copy Button */}
                   <View style={[styles.footerRow, isUser && { justifyContent: 'flex-end' }]}>
                     <Text style={styles.timestampText}>{msg.timestamp}</Text>
@@ -345,14 +380,15 @@ export default function ChatScreen() {
               onChangeText={setInput}
               onSubmitEditing={() => handleSendMessage()}
               returnKeyType="send"
+              editable={!isTyping}
             />
             <TouchableOpacity
               style={[
                 styles.sendBtn,
-                !isInputEmpty && styles.sendBtnActive,
+                (!isInputEmpty || isTyping) && styles.sendBtnActive,
               ]}
               onPress={() => handleSendMessage()}
-              disabled={isInputEmpty}
+              disabled={isInputEmpty || isTyping}
               activeOpacity={0.85}
             >
               <SendIcon size={18} color={isInputEmpty ? '#9498AC' : '#FFFFFF'} />
@@ -532,6 +568,28 @@ const styles = StyleSheet.create({
   },
   msgTextUser: {
     color: '#FFFFFF',
+  },
+
+  /* Statutory citation chips */
+  citationRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+  },
+  citationChip: {
+    backgroundColor: '#EEF6F4',
+    borderWidth: 1,
+    borderColor: '#C9E8E1',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    maxWidth: 240,
+  },
+  citationText: {
+    fontSize: 10,
+    color: '#0B6B5D',
+    fontWeight: '600',
   },
 
   /* Footer & Copy */

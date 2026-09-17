@@ -50,6 +50,28 @@ export interface ScanRecord {
   officerId?: string;
   location?: string;
   fields: FieldCheck[];
+  facesScanned?: string[];
+  imageUris?: string[];
+}
+
+export interface MergedCoverage {
+  found: string[];
+  missing: string[];
+  hintLine: string;
+  allFound: boolean;
+}
+
+export interface SessionCoverageResponse {
+  sessionId: string;
+  viewsCaptured: number;
+  mergedCoverage: MergedCoverage;
+  quality: {
+    averageSharpness: number;
+    isAcceptable: boolean;
+    latest?: any;
+    views?: any[];
+  };
+  fields: Record<string, any>;
 }
 
 export interface DailyCount {

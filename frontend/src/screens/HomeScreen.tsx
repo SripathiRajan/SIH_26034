@@ -36,6 +36,16 @@ function ZapIcon({ size = 15, color = '#FFFFFF' }: { size?: number; color?: stri
   );
 }
 
+function LayersIcon({ size = 16, color = '#FFFFFF' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 2L2 7l10 5 10-5-10-5Z" />
+      <Path d="M2 17l10 5 10-5" />
+      <Path d="M2 12l10 5 10-5" />
+    </Svg>
+  );
+}
+
 function ScanVisualIcon({ size = 34, color = 'rgba(255,255,255,0.5)' }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
@@ -500,6 +510,17 @@ export default function HomeScreen({ navigation }: Props) {
                   {isHeroCameraActive ? 'Close camera' : 'Live product scan'}
                 </Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionMultiAngle]}
+                onPress={() => navigation.navigate('Capture')}
+                activeOpacity={0.85}
+                // @ts-ignore
+                className="inspect-btn"
+              >
+                <LayersIcon size={16} color="#FFFFFF" />
+                <Text style={styles.actionMultiAngleText}>Multi-angle capture</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -913,6 +934,15 @@ const styles = StyleSheet.create({
   },
   actionScanActive: {
     backgroundColor: '#FF5C5C',
+  },
+  actionMultiAngle: {
+    backgroundColor: '#4F46E5',
+  },
+  actionMultiAngleText: {
+    color: '#FFFFFF',
+    fontFamily: Platform.OS === 'web' ? "'Space Grotesk', sans-serif" : 'System',
+    fontSize: 14,
+    fontWeight: '600',
   },
   actionScanText: {
     color: '#062E28',

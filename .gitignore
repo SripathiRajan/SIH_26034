@@ -35,5 +35,6 @@ frontend/.expo/
 frontend/web-build/
 node_modules/
 .expo/
+.zcode/
 
 

@@ -238,7 +238,7 @@ export async function exportReportAsPdf(scan: ScanRecord, officerName?: string):
     }
   } else {
     // Native fallback — just log (expo-print can be added later)
-    console.log('PDF export on native: install expo-print + expo-sharing');
+    console.warn('PDF export on native: install expo-print + expo-sharing');
   }
 }
 

@@ -4,8 +4,10 @@ Bridging core.config and CB2 settings.
 """
 
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from core import config as core_cfg
+
 
 
 class Settings(BaseSettings):
@@ -37,7 +39,54 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = core_cfg.ALGORITHM
     JWT_EXPIRY_MINUTES: int = core_cfg.ACCESS_TOKEN_EXPIRE_MINUTES
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # Gemini LLM Settings
+    # Reads GEMINI_API_KEY from environment or .env without logging or printing
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-3.6-flash"
+
+    # Groq LLM Settings (primary chatbot provider; OpenAI-compatible endpoint)
+    GROQ_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = core_cfg.GROQ_MODEL
+    GROQ_API_BASE: str = core_cfg.GROQ_API_BASE
+    LLM_TIMEOUT_SECONDS: float = 30.0
+
+
+
+    @property
+    def is_gemini_configured(self) -> bool:
+        """
+        Detects whether GEMINI_API_KEY is configured.
+        SECURITY: Returns boolean only; never logs or prints the API key value.
+        """
+        key = self.GEMINI_API_KEY if self.GEMINI_API_KEY is not None else os.environ.get("GEMINI_API_KEY")
+        return bool(key and str(key).strip())
+
+    @property
+    def is_groq_configured(self) -> bool:
+        """
+        Detects whether GROQ_API_KEY is configured.
+        SECURITY: Returns boolean only; never logs or prints the API key value.
+        """
+        key = self.GROQ_API_KEY if self.GROQ_API_KEY is not None else os.environ.get("GROQ_API_KEY")
+        return bool(key and str(key).strip())
+
+    @property
+    def llm_provider(self) -> Optional[str]:
+        """Active chatbot LLM provider for diagnostics: 'groq' | 'gemini' | None."""
+        if self.is_groq_configured:
+            return "groq"
+        if self.is_gemini_configured:
+            return "gemini"
+        return None
+
+
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
 
 
 settings = Settings()
+

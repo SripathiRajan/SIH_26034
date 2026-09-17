@@ -16,7 +16,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.routers import auth, scans, product, sync, rules, chat, legacy
+from app.routers import auth, scans, product, sync, rules, chat, legacy, scan_session
 
 # Initialize FastAPI application
 app = FastAPI(
@@ -105,6 +105,7 @@ app.include_router(sync.router)
 app.include_router(rules.router)
 app.include_router(chat.router)
 app.include_router(legacy.router)
+app.include_router(scan_session.router)
 
 
 if __name__ == "__main__":

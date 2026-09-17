@@ -22,7 +22,13 @@ class ComplianceVectorStore:
                 from sentence_transformers import SentenceTransformer
                 import faiss
                 self._encoder = SentenceTransformer(self.model_name)
-                dim = self._encoder.get_sentence_embedding_dimension()
+                # get_embedding_dimension() is the new name (sentence-transformers >= 3.x)
+                # fall back to get_sentence_embedding_dimension() for older installs
+                dim_fn = (
+                    getattr(self._encoder, "get_embedding_dimension", None)
+                    or self._encoder.get_sentence_embedding_dimension
+                )
+                dim = dim_fn()
                 self._index = faiss.IndexFlatL2(dim)
             except Exception as e:
                 logger.warning(f"Vector store dependencies could not be loaded: {e}. Running in degraded mode.")

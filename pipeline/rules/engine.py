@@ -41,6 +41,11 @@ def enrich_field_checks(field_checks: list) -> list:
         fc["ruleCitation"]    = rule_data.get("rule_citation",     fc.get("ruleCitation", ""))
         fc["ruleExplanation"] = rule_data.get("rule_explanation",  fc.get("ruleExplanation", ""))
 
+        # Gazette provenance (v1.2 schema — may be None if field not yet reviewed)
+        fc["gsrNumber"]     = rule_data.get("gsr_number",     None)
+        fc["effectiveDate"] = rule_data.get("effective_date", None)
+        fc["gazetteSource"] = rule_data.get("gazette_source", None)
+
         # Refine violation reason using statutory language
         if fc.get("status") == "fail":
             fc["violationReason"] = rule_data.get("fail_condition",    fc.get("violationReason", ""))

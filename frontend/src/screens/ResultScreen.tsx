@@ -97,6 +97,41 @@ export default function ResultScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(!scanData && !!scanId && !DEMO_MODE);
   const [error, setError] = useState<string | null>(null);
 
+  const normalizeImageUri = (uri?: string | null): string => {
+    if (!uri) return '';
+    if (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('data:') || uri.startsWith('blob:') || uri.startsWith('file://')) {
+      return uri;
+    }
+    const base = api.getBaseUrl().replace(/\/+$/, '');
+    const path = uri.startsWith('/') ? uri : `/${uri}`;
+    return `${base}${path}`;
+  };
+
+  const imageUris: string[] = React.useMemo(() => {
+    const uris: string[] = [];
+    if (Array.isArray(scan?.imageUris) && scan.imageUris.length > 0) {
+      uris.push(...scan.imageUris);
+    } else if (Array.isArray(route.params?.imageUris) && route.params.imageUris.length > 0) {
+      uris.push(...route.params.imageUris);
+    } else if (scan?.imageUri) {
+      uris.push(scan.imageUri);
+    }
+    return uris.map((u) => normalizeImageUri(u)).filter(Boolean);
+  }, [scan?.imageUris, scan?.imageUri, route.params?.imageUris]);
+
+  const facesScanned = Array.isArray(scan?.facesScanned) ? scan.facesScanned : [];
+  const viewCount = Math.max(imageUris.length, facesScanned.length);
+
+  const [activeImageUri, setActiveImageUri] = useState<string>('');
+
+  useEffect(() => {
+    if (imageUris.length > 0) {
+      setActiveImageUri(imageUris[0]);
+    } else if (scan?.imageUri) {
+      setActiveImageUri(normalizeImageUri(scan.imageUri));
+    }
+  }, [imageUris, scan?.imageUri]);
+
   useEffect(() => {
     if (!scan && scanId) {
       setLoading(true);
@@ -192,6 +227,8 @@ export default function ResultScreen({ navigation, route }: Props) {
   const overallStatusBg =
     scan.status === 'pass' ? color.successBg : scan.status === 'fail' ? color.dangerBg : color.warningBg;
 
+  const displayedMainImage = activeImageUri || (scan.imageUri ? normalizeImageUri(scan.imageUri) : '');
+
   return (
     <DottedBackground>
       <DemoBanner />
@@ -208,15 +245,15 @@ export default function ResultScreen({ navigation, route }: Props) {
       <View style={[styles.header, isMobile && styles.mobileHeader]}>
         <View style={[styles.headerTop, isMobile && { flexDirection: 'column', alignItems: 'flex-start', gap: space.sm }]}>
           {/* Product Image Thumbnail */}
-          {scan.imageUri ? (
+          {displayedMainImage ? (
             <Image
-              source={{ uri: scan.imageUri }}
+              source={{ uri: displayedMainImage }}
               style={styles.productThumb}
               resizeMode="cover"
             />
           ) : (
-            <View style={[styles.productThumbPlaceholder, { backgroundColor: scan.thumbnailColor + '20' }]}>
-              <Text style={[styles.productThumbInitial, { color: scan.thumbnailColor }]}>
+            <View style={[styles.productThumbPlaceholder, { backgroundColor: (scan.thumbnailColor || color.primary) + '20' }]}>
+              <Text style={[styles.productThumbInitial, { color: scan.thumbnailColor || color.primary }]}>
                 {(scan.brand || 'P').charAt(0)}
               </Text>
             </View>
@@ -225,6 +262,11 @@ export default function ResultScreen({ navigation, route }: Props) {
           <View style={{ flex: 1 }}>
             <View style={styles.badgeRow}>
               <Text style={styles.platformBadge}>INSPECTION REPORT · ID: {scan.id?.toUpperCase() || 'AUD-001'}</Text>
+              {viewCount > 1 && (
+                <View style={styles.multiViewBadge}>
+                  <Text style={styles.multiViewBadgeText}>Scanned from {viewCount} views</Text>
+                </View>
+              )}
             </View>
             <Text style={[styles.headerTitle, isMobile && styles.mobileTitle]}>
               {scan.productName || 'Package Inspection Report'}
@@ -235,6 +277,47 @@ export default function ResultScreen({ navigation, route }: Props) {
           </View>
           <StatusPill status={scan.status} size="md" />
         </View>
+
+        {/* Horizontal Thumbnail Carousel for Multiple Views */}
+        {imageUris.length > 1 && (
+          <View style={styles.carouselContainer}>
+            <View style={styles.carouselHeaderRow}>
+              <Text style={styles.carouselTitle}>Captured Package Views ({imageUris.length})</Text>
+              <Text style={styles.carouselSubtitle}>Tap to inspect angle</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.carouselScrollContent}
+            >
+              {imageUris.map((uri, idx) => {
+                const isSelected = (activeImageUri || imageUris[0]) === uri;
+                return (
+                  <TouchableOpacity
+                    key={`thumb-${idx}-${uri}`}
+                    onPress={() => setActiveImageUri(uri)}
+                    style={[
+                      styles.carouselThumbWrapper,
+                      isSelected && styles.carouselThumbActive,
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    <Image
+                      source={{ uri }}
+                      style={styles.carouselThumbImg}
+                      resizeMode="cover"
+                    />
+                    <View style={[styles.carouselThumbTag, isSelected && styles.carouselThumbTagActive]}>
+                      <Text style={[styles.carouselThumbTagText, isSelected && styles.carouselThumbTagTextActive]}>
+                        View {idx + 1}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       {/* Authenticity + Summary Row */}
@@ -485,6 +568,10 @@ const styles = StyleSheet.create({
   },
   badgeRow: {
     marginBottom: space.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    flexWrap: 'wrap',
   },
   platformBadge: {
     fontSize: 11,
@@ -495,6 +582,88 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radius.full,
     alignSelf: 'flex-start',
+  },
+  multiViewBadge: {
+    backgroundColor: color.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: color.primaryBorder,
+  },
+  multiViewBadgeText: {
+    fontSize: 11,
+    fontWeight: font.weight.semibold,
+    color: color.primary,
+  },
+  carouselContainer: {
+    marginTop: space.md,
+    paddingTop: space.md,
+    borderTopWidth: 1,
+    borderTopColor: color.surfaceBorder,
+  },
+  carouselHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: space.xs,
+  },
+  carouselTitle: {
+    fontSize: font.size.xs,
+    fontWeight: font.weight.semibold,
+    color: color.inkSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  carouselSubtitle: {
+    fontSize: font.size.xs,
+    color: color.inkMuted,
+  },
+  carouselScrollContent: {
+    gap: space.sm,
+    paddingVertical: 4,
+  },
+  carouselThumbWrapper: {
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: color.surfaceBorderDark,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#0F172A',
+    marginRight: space.xs,
+  },
+  carouselThumbActive: {
+    borderColor: color.primary,
+    shadowColor: color.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  carouselThumbImg: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.sm,
+  },
+  carouselThumbTag: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingVertical: 2,
+    alignItems: 'center',
+  },
+  carouselThumbTagActive: {
+    backgroundColor: color.primary,
+  },
+  carouselThumbTagText: {
+    fontSize: 9,
+    fontWeight: font.weight.bold,
+    color: '#CBD5E1',
+  },
+  carouselThumbTagTextActive: {
+    color: '#FFFFFF',
   },
   headerTitle: {
     fontSize: font.size.xxl,

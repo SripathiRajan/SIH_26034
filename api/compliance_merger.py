@@ -78,6 +78,9 @@ def merge_package_faces(
                     merged_fields[field_name]["confidence"] = new_conf
                     merged_fields[field_name]["found_on_face"] = label
                     merged_fields[field_name]["source"] = f_data.get("source")
+                    for extra_key in ("is_valid", "needs_review", "review_reason", "violation_reason", "captured", "location"):
+                        if extra_key in f_data:
+                            merged_fields[field_name][extra_key] = f_data[extra_key]
 
     total_fields = len(merged_fields)
     found_count = sum(1 for v in merged_fields.values() if v.get("found", False))
@@ -118,11 +121,20 @@ def merge_package_faces(
         if mrp_range and ocr_mrp:
             gtin_verification["checks"]["mrp_range"] = check_mrp_in_range(ocr_mrp, mrp_range)
 
+    # Filter out instructions whose target fields have now been detected on another face
+    active_instructions = []
+    for inst in user_instructions:
+        if isinstance(inst, dict) and "target_fields" in inst:
+            if any(tf in missing_fields for tf in inst["target_fields"]):
+                active_instructions.append(inst)
+        else:
+            active_instructions.append(inst)
+
     # Status verdict based on configurable threshold
-    if compliance_score >= COMPLIANCE_PASS_THRESHOLD and not user_instructions:
+    if compliance_score >= COMPLIANCE_PASS_THRESHOLD and not active_instructions:
         overall_status = "COMPLIANT"
         verdict_message = "All mandatory statutory declarations are present and compliant with Legal Metrology 2011 & FSSAI."
-    elif user_instructions:
+    elif active_instructions:
         overall_status = "ACTION_REQUIRED"
         verdict_message = "A declaration pointer was detected directing to inspect package bottom/flaps for MRP/expiry."
     else:
@@ -139,6 +151,7 @@ def merge_package_faces(
         "total_fields": total_fields,
         "missing_fields": missing_fields,
         "merged_fields": merged_fields,
-        "user_instructions": user_instructions,
+        "fields": merged_fields,
+        "user_instructions": active_instructions,
         "gtin_verification": gtin_verification
     }

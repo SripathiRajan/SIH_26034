@@ -11,9 +11,16 @@ services:
       - "8000:8000"
     environment:
       - ENVIRONMENT=production
+      # Code reads PRAMAN_SECRET_KEY (core/config.py) — JWT_SECRET_KEY is not a
+      # recognized variable. Substituted from the project-root .env (gitignored)
+      # or the host environment; startup fails fast if it is missing.
+      - PRAMAN_SECRET_KEY=${PRAMAN_SECRET_KEY:?Set PRAMAN_SECRET_KEY in .env before starting}
       - DATABASE_URL=sqlite:///./praman.db
-      - JWT_SECRET_KEY=praman_production_super_secret_key_change_me_in_prod
-      - CORS_ORIGINS=http://localhost:8081,http://localhost:19006,http://127.0.0.1:8081
+      # Public origins of the deployed web/mobile app (override via .env / host env)
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8081,http://localhost:19006,http://127.0.0.1:8081}
+      # Chatbot LLM provider (optional; empty -> honest statutory-template fallback)
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-openai/gpt-oss-120b}
     volumes:
       - ./uploads:/app/uploads
       - ./data:/app/data

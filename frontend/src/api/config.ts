@@ -19,6 +19,8 @@ export const API_CONFIG = {
   ENDPOINTS: {
     HEALTH: '/health',
     SCAN: '/api/scan',
+    SCAN_SESSION: '/api/scan/session',
+    FINALIZE_SESSION: (id: string) => `/api/scan/session/${id}/finalize`,
     SCANS_LIST: '/api/scans',
     SCAN_DETAIL: (id: string) => `/api/scans/${id}`,
     SCAN_PDF: (id: string) => `/api/scans/${id}/pdf`,

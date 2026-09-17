@@ -22,147 +22,224 @@ export default function ProcessingScreen({ navigation, route }: Props) {
   const [extractedLogs, setExtractedLogs] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const imageUri = route.params?.imageUri;
+  const sessionId = route.params?.sessionId;
+  const imageUris = route.params?.imageUris;
+  const isSessionMode = Boolean(sessionId);
+  const isMultiAngle = Boolean(sessionId && Array.isArray(imageUris) && imageUris.length > 1);
 
   useEffect(() => {
     let isMounted = true;
 
-    api.analyzeImage(imageUri || '', (stageIdx) => {
-      if (isMounted) setCurrentStageIndex(stageIdx);
-    }).then((resultScan) => {
-      if (isMounted) {
-        if (resultScan.fields && resultScan.fields.length > 0) {
-          resultScan.fields.forEach((f) => {
-            setExtractedLogs((prev) => [...prev, "Verified " + f.label + ": " + (f.extractedValue || f.extractedText || "DETECTED") + " [" + f.status.toUpperCase() + "]"]);
-          });
+    if (isSessionMode && sessionId) {
+      const viewCount = Array.isArray(imageUris) ? imageUris.length : 1;
+      setExtractedLogs([
+        `Multi-angle session: ${sessionId.slice(0, 8)}...`,
+        `Synthesizing declarations across ${viewCount} captured package views...`,
+      ]);
+
+      setCurrentStageIndex(1);
+      const stageTimer = setInterval(() => {
+        if (isMounted) {
+          setCurrentStageIndex((prev) => Math.min(prev + 1, OCR_PIPELINE_STAGES.length - 1));
         }
-        setTimeout(() => {
-          navigation.replace('Result', { scanData: resultScan });
-        }, 600);
-      }
-    }).catch((err: any) => {
-      if (DEMO_MODE) {
-        simulateScanPipeline(
-          imageUri || '',
-          (stageIdx) => {
-            if (isMounted) setCurrentStageIndex(stageIdx);
-          },
-          (snippet) => {
-            if (isMounted) setExtractedLogs((prev) => [...prev, snippet]);
-          }
-        ).then((resultScan) => {
+      }, 450);
+
+      api.finalizeSession(sessionId)
+        .then((resultScan) => {
+          clearInterval(stageTimer);
           if (isMounted) {
+            setCurrentStageIndex(OCR_PIPELINE_STAGES.length);
+            if (resultScan.fields && resultScan.fields.length > 0) {
+              resultScan.fields.forEach((f) => {
+                setExtractedLogs((prev) => [
+                  ...prev,
+                  "Verified " + f.label + ": " + (f.extractedValue || f.extractedText || "DETECTED") + " [" + f.status.toUpperCase() + "]"
+                ]);
+              });
+            }
             setTimeout(() => {
-              navigation.replace('Result', { scanData: resultScan });
-            }, 500);
+              navigation.replace('Result', { scanData: resultScan, imageUris });
+            }, 600);
+          }
+        })
+        .catch((err: any) => {
+          clearInterval(stageTimer);
+          if (DEMO_MODE) {
+            simulateScanPipeline(
+              imageUris[0] || '',
+              (stageIdx) => {
+                if (isMounted) setCurrentStageIndex(stageIdx);
+              },
+              (snippet) => {
+                if (isMounted) setExtractedLogs((prev) => [...prev, snippet]);
+              }
+            ).then((resultScan) => {
+              if (isMounted) {
+                const demoMultiScan = {
+                  ...resultScan,
+                  facesScanned: imageUris.map((_: string, idx: number) => `view_${idx + 1}`),
+                  imageUris: imageUris,
+                };
+                setTimeout(() => {
+                  navigation.replace('Result', { scanData: demoMultiScan, imageUris });
+                }, 500);
+              }
+            });
+          } else {
+            if (isMounted) {
+              setError(err?.message || 'Finalization failed. Backend may be offline or unreachable.');
+            }
           }
         });
-      } else {
-        if (isMounted) {
-          setError(err?.message || 'Processing failed. Backend may be offline or unreachable.');
-        }
-      }
-    });
 
-    return () => {
-      isMounted = false;
-    };
+      return () => {
+        isMounted = false;
+        clearInterval(stageTimer);
+      };
+    } else {
+      // Legacy single-image flow
+      api.analyzeImage(imageUri || '', (stageIdx) => {
+        if (isMounted) setCurrentStageIndex(stageIdx);
+      }).then((resultScan) => {
+        if (isMounted) {
+          if (resultScan.fields && resultScan.fields.length > 0) {
+            resultScan.fields.forEach((f) => {
+              setExtractedLogs((prev) => [...prev, "Verified " + f.label + ": " + (f.extractedValue || f.extractedText || "DETECTED") + " [" + f.status.toUpperCase() + "]"]);
+            });
+          }
+          setTimeout(() => {
+            navigation.replace('Result', { scanData: resultScan });
+          }, 600);
+        }
+      }).catch((err: any) => {
+        if (DEMO_MODE) {
+          simulateScanPipeline(
+            imageUri || '',
+            (stageIdx) => {
+              if (isMounted) setCurrentStageIndex(stageIdx);
+            },
+            (snippet) => {
+              if (isMounted) setExtractedLogs((prev) => [...prev, snippet]);
+            }
+          ).then((resultScan) => {
+            if (isMounted) {
+              setTimeout(() => {
+                navigation.replace('Result', { scanData: resultScan });
+              }, 500);
+            }
+          });
+        } else {
+          if (isMounted) {
+            setError(err?.message || 'Processing failed. Backend may be offline or unreachable.');
+          }
+        }
+      });
+
+      return () => {
+        isMounted = false;
+      };
+    }
   }, []);
 
   return (
     <DottedBackground>
       <DemoBanner />
       <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.liveBadge}>
-          <View style={[styles.liveDot, error ? { backgroundColor: color.danger } : {}]} />
-          <Text style={[styles.liveBadgeText, error ? { color: color.danger } : {}]}>
-            {error ? 'PROCESSING FAILED' : 'VERIFYING DECLARATIONS'}
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.liveBadge}>
+            <View style={[styles.liveDot, error ? styles.liveDotError : null]} />
+            <Text style={[styles.liveBadgeText, error ? styles.liveBadgeTextError : null]}>
+              {error ? 'PROCESSING FAILED' : isMultiAngle ? 'FINALIZING MULTI-ANGLE SCAN' : isSessionMode ? 'FINALIZING INSPECTION' : 'VERIFYING DECLARATIONS'}
+            </Text>
+          </View>
+          <Text style={[styles.headerTitle, isMobile && styles.headerTitleMobile]}>
+            {error
+              ? 'Inspection Error'
+              : isMultiAngle
+                ? `Finalizing inspection across ${(imageUris?.length || 1)} views...`
+                : isSessionMode
+                ? 'Finalizing inspection report...'
+                : 'Processing Packaging Label...'}
+          </Text>
+          <Text style={styles.headerSubtitle}>
+            {error
+              ? 'An error occurred while communicating with the inspection backend.'
+              : isMultiAngle
+                ? `Synthesizing statutory declarations across ${(imageUris?.length || 1)} captured package views into a unified compliance audit.`
+                : isSessionMode
+                ? 'Consolidating statutory declarations into a unified compliance audit.'
+                : 'Reading label text and checking mandatory declarations against Legal Metrology Rules, 2011.'}
           </Text>
         </View>
-        <Text style={[styles.headerTitle, isMobile && { fontSize: 20 }]}>
-          {error ? 'Inspection Error' : 'Processing Packaging Label...'}
-        </Text>
-        <Text style={styles.headerSubtitle}>
-          {error
-            ? 'An error occurred while communicating with the inspection backend.'
-            : 'Reading label text and checking mandatory declarations against Legal Metrology Rules, 2011.'}
-        </Text>
-      </View>
 
-      {error && (
-        <GlassCard style={[styles.terminalCard, { borderColor: color.danger, padding: 20, marginBottom: 20 }]}>
-          <Text style={[styles.terminalTitle, { color: color.danger, marginBottom: 8 }]}>Error Details</Text>
-          <Text style={{ color: '#E2E8F0', fontSize: 13, marginBottom: 16 }}>{error}</Text>
-          <TouchableOpacity
-            style={{
-              backgroundColor: color.primary,
-              paddingVertical: 10,
-              paddingHorizontal: 18,
-              borderRadius: 8,
-              alignSelf: 'flex-start',
-            }}
-            onPress={() => navigation.navigate('Capture')}
-          >
-            <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Return to Scanner</Text>
-          </TouchableOpacity>
+        {error && (
+          <GlassCard style={[styles.terminalCard, styles.errorCard]}>
+            <Text style={[styles.terminalTitle, styles.errorTitle]}>Error Details</Text>
+            <Text style={styles.errorMessage}>{error}</Text>
+            <TouchableOpacity
+              style={styles.returnBtn}
+              onPress={() => navigation.navigate('Capture')}
+            >
+              <Text style={styles.returnBtnText}>Return to Scanner</Text>
+            </TouchableOpacity>
+          </GlassCard>
+        )}
+
+        {/* Verification Log Stream */}
+        <GlassCard style={styles.terminalCard}>
+          <View style={styles.terminalHeader}>
+            <Text style={styles.terminalBadge}>VERIFICATION LOG</Text>
+            <Text style={styles.terminalTitle}>Extracted Label Text & Verification Progress</Text>
+          </View>
+
+          <View style={styles.terminalBody}>
+            {extractedLogs.map((log, idx) => (
+              <Text key={idx} style={styles.terminalLine}>
+                <Text style={styles.terminalPrompt}>❯ </Text>
+                {log}
+              </Text>
+            ))}
+          </View>
         </GlassCard>
-      )}
 
-      {/* Verification Log Stream */}
-      <GlassCard style={styles.terminalCard}>
-        <View style={styles.terminalHeader}>
-          <Text style={styles.terminalBadge}>VERIFICATION LOG</Text>
-          <Text style={styles.terminalTitle}>Extracted Label Text & Verification Progress</Text>
+        {/* Pipeline Progress Stages */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Verification Progress</Text>
         </View>
 
-        <View style={styles.terminalBody}>
-          {extractedLogs.map((log, idx) => (
-            <Text key={idx} style={styles.terminalLine}>
-              <Text style={styles.terminalPrompt}>❯ </Text>
-              {log}
-            </Text>
-          ))}
-        </View>
-      </GlassCard>
+        <View style={styles.stagesList}>
+          {OCR_PIPELINE_STAGES.map((stage, idx) => {
+            const isCompleted = idx < currentStageIndex;
+            const isActive = idx === currentStageIndex;
 
-      {/* Pipeline Progress Stages */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Verification Progress</Text>
-      </View>
-
-      <View style={styles.stagesList}>
-        {OCR_PIPELINE_STAGES.map((stage, idx) => {
-          const isCompleted = idx < currentStageIndex;
-          const isActive = idx === currentStageIndex;
-          
-          return (
-            <GlassCard key={stage.id} style={[styles.stageCard, isActive ? styles.activeStageCard : {}]}>
-              <View style={styles.stageRow}>
-                <View style={[
-                  styles.stageStatusBadge,
-                  isCompleted && styles.completedBadge,
-                  isActive && styles.activeBadge,
-                ]}>
-                  <Text style={[
-                    styles.stageStatusText,
-                    isCompleted && styles.completedText,
-                    isActive && styles.activeText,
+            return (
+              <GlassCard key={stage.id} style={[styles.stageCard, isActive ? styles.activeStageCard : {}]}>
+                <View style={styles.stageRow}>
+                  <View style={[
+                    styles.stageStatusBadge,
+                    isCompleted && styles.completedBadge,
+                    isActive && styles.activeBadge,
                   ]}>
-                    {isCompleted ? 'Passed' : isActive ? 'Running' : 'Pending'}
-                  </Text>
-                </View>
+                    <Text style={[
+                      styles.stageStatusText,
+                      isCompleted && styles.completedText,
+                      isActive && styles.activeText,
+                    ]}>
+                      {isCompleted ? 'Passed' : isActive ? 'Running' : 'Pending'}
+                    </Text>
+                  </View>
 
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.stageTitle}>{stage.title}</Text>
-                  <Text style={styles.stageSub}>{stage.subtitle}</Text>
+                  <View style={styles.stageContentCol}>
+                    <Text style={styles.stageTitle}>{stage.title}</Text>
+                    <Text style={styles.stageSub}>{stage.subtitle}</Text>
+                  </View>
                 </View>
-              </View>
-            </GlassCard>
-          );
-        })}
-      </View>
-    </ScrollView>
+              </GlassCard>
+            );
+          })}
+        </View>
+      </ScrollView>
     </DottedBackground>
   );
 }
@@ -320,5 +397,42 @@ const styles = StyleSheet.create({
   stageSub: {
     fontSize: font.size.xs,
     color: color.inkSecondary,
-  }
+  },
+  liveDotError: {
+    backgroundColor: color.danger,
+  },
+  liveBadgeTextError: {
+    color: color.danger,
+  },
+  headerTitleMobile: {
+    fontSize: 20,
+  },
+  errorCard: {
+    borderColor: color.danger,
+    padding: space.lg,
+    marginBottom: space.lg,
+  },
+  errorTitle: {
+    color: color.danger,
+    marginBottom: space.xs,
+  },
+  errorMessage: {
+    color: '#E2E8F0',
+    fontSize: 13,
+    marginBottom: space.md,
+  },
+  returnBtn: {
+    backgroundColor: color.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: radius.md,
+    alignSelf: 'flex-start',
+  },
+  returnBtnText: {
+    color: '#FFFFFF',
+    fontWeight: font.weight.semibold,
+  },
+  stageContentCol: {
+    flex: 1,
+  },
 });

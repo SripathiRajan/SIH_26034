@@ -10,7 +10,7 @@ import { API_CONFIG, DEMO_MODE } from './config';
 import { recentScans, dashboardStats } from '../data/mockData';
 import { rulesDatabase } from '../data/rulesDatabase';
 import { simulateScanPipeline } from '../services/scanSimulator';
-import { ScanRecord, DashboardStats, Rule, OfficerUser } from '../types';
+import { ScanRecord, DashboardStats, Rule, OfficerUser, SessionCoverageResponse } from '../types';
 
 export class ApiError extends Error {
   public code: string;
@@ -165,6 +165,185 @@ class ApiClient {
   }
 
   /**
+   * Helper to append an image URI to FormData across Web and React Native Native.
+   */
+  private async appendImageToFormData(
+    formData: FormData,
+    fieldName: string,
+    imageUri: string,
+    filename: string
+  ): Promise<void> {
+    if (Platform.OS === 'web') {
+      let blob: Blob | null = null;
+      if (imageUri.startsWith('data:')) {
+        const arr = imageUri.split(',');
+        const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        blob = new Blob([u8arr], { type: mime });
+      } else if (imageUri.startsWith('blob:') || imageUri.startsWith('http')) {
+        try {
+          const blobRes = await fetch(imageUri);
+          blob = await blobRes.blob();
+        } catch (e) {
+          console.warn('[ApiClient] Failed to fetch image blob on web:', e);
+        }
+      }
+      if (blob) {
+        formData.append(fieldName, blob, filename);
+      } else {
+        // @ts-ignore
+        formData.append(fieldName, { uri: imageUri, name: filename, type: 'image/jpeg' });
+      }
+    } else {
+      // Native React Native
+      const fileObj = {
+        uri: imageUri,
+        name: filename,
+        type: 'image/jpeg',
+      };
+      // @ts-ignore
+      formData.append(fieldName, fileObj);
+    }
+  }
+
+  /**
+   * Multi-angle scanning session: upload 1–6 images to create or resume an in-memory session.
+   * Returns live statutory coverage and merged fields across all captured angles.
+   * Timeout: 120s.
+   */
+  public async scanSession(
+    images: string[],
+    sessionId?: string,
+    gtin?: string
+  ): Promise<SessionCoverageResponse> {
+    if (!images || images.length < 1 || images.length > 6) {
+      throw new ApiError('INVALID_INPUT', 'Between 1 and 6 images are required in one batch');
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s timeout
+
+      const formData = new FormData();
+      for (let i = 0; i < images.length; i++) {
+        const fname = `view_${i + 1}.jpg`;
+        await this.appendImageToFormData(formData, 'images', images[i], fname);
+      }
+
+      if (sessionId && sessionId.trim()) {
+        formData.append('session_id', sessionId.trim());
+      }
+      if (gtin && gtin.trim()) {
+        formData.append('gtin', gtin.trim());
+      }
+
+      const endpoint = API_CONFIG.ENDPOINTS.SCAN_SESSION || '/api/scan/session';
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data: SessionCoverageResponse = await response.json();
+        return data;
+      } else {
+        const errorText = await response.text().catch(() => '');
+        console.warn(`[ApiClient] scanSession error HTTP ${response.status}: ${errorText}`);
+        throw new ApiError(
+          response.status === 404 ? 'SESSION_NOT_FOUND' : 'SCAN_SESSION_FAILED',
+          `Multi-angle scan failed (HTTP ${response.status}): ${errorText || 'Server error'}`
+        );
+      }
+    } catch (err: any) {
+      if (err instanceof ApiError) throw err;
+      if (err.name === 'AbortError') {
+        throw new ApiError('TIMEOUT', 'Multi-angle scan timed out after 120s');
+      }
+      throw new ApiError('BACKEND_UNREACHABLE', `Cannot connect to multi-angle scan session: ${err?.message || 'Server offline'}`);
+    }
+  }
+
+  /**
+   * Finalize a multi-angle scan session into exactly one persistent ScanRecord.
+   * Requires inspector authentication.
+   * Timeout: 30s.
+   */
+  public async finalizeSession(sessionId: string): Promise<ScanRecord> {
+    if (!sessionId || !sessionId.trim()) {
+      throw new ApiError('INVALID_INPUT', 'Session ID is required to finalize session');
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+      const endpoint = typeof API_CONFIG.ENDPOINTS.FINALIZE_SESSION === 'function'
+        ? API_CONFIG.ENDPOINTS.FINALIZE_SESSION(sessionId)
+        : `/api/scan/session/${sessionId}/finalize`;
+
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          ...this.getHeaders(),
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (response.status === 401) {
+        throw new ApiError('UNAUTHORIZED', 'Authentication required to finalize inspection report. Please log in.');
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        return this.normalizeScanRecord(data, data.imageUri || '');
+      } else {
+        const errorText = await response.text().catch(() => '');
+        console.warn(`[ApiClient] finalizeSession error HTTP ${response.status}: ${errorText}`);
+        throw new ApiError(
+          response.status === 404 ? 'NOT_FOUND' : 'FINALIZE_FAILED',
+          `Failed to finalize session (HTTP ${response.status}): ${errorText || 'Server error'}`
+        );
+      }
+    } catch (err: any) {
+      if (err instanceof ApiError) throw err;
+      if (err.name === 'AbortError') {
+        throw new ApiError('TIMEOUT', 'Finalize request timed out after 30s');
+      }
+      throw new ApiError('BACKEND_UNREACHABLE', `Cannot finalize session: ${err?.message || 'Server offline'}`);
+    }
+  }
+
+  /**
+   * Discard a multi-angle scan session without creating a ScanRecord.
+   * Idempotent on the backend: discarding an expired/missing session still succeeds.
+   */
+  public async discardSession(sessionId: string): Promise<void> {
+    if (!sessionId || !sessionId.trim()) return;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      await fetch(`${this.baseUrl}/api/scan/session/${sessionId.trim()}`, {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (err) {
+      // Non-fatal: backend TTL/LRU eviction cleans the session up anyway
+      console.warn('[ApiClient] discardSession failed (session will expire via TTL):', err);
+    }
+  }
+
+  /**
    * List all scan records from database or fallback mock records.
    */
   public async listScans(params?: { brand?: string; status?: string; page?: number }): Promise<ScanRecord[]> {
@@ -268,12 +447,15 @@ class ApiClient {
   }
 
   /**
-   * Query Legal Metrology RAG Compliance Assistant.
+   * Query Legal Metrology RAG Compliance Assistant (backend /api/chat).
+   * Synthesis: Groq (primary) or Gemini with statutory-template fallback.
    */
-  public async askAssistant(question: string): Promise<{ answer: string; sources: string[] }> {
+  public async askAssistant(
+    question: string
+  ): Promise<{ answer: string; sources: string[]; llmGenerated?: boolean }> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
       const res = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.CHAT}`, {
         method: 'POST',
         headers: {
@@ -290,16 +472,15 @@ class ApiClient {
         return {
           answer: data.reply || data.text || data.answer || '',
           sources: data.citations || data.sources || ['Legal Metrology Act, 2009', 'PCR, 2011'],
+          llmGenerated: Boolean(data.llm_generated),
         };
       }
-    } catch {
-      // Fallback
+      throw new ApiError('CHAT_FAILED', `Assistant query failed (HTTP ${res.status})`);
+    } catch (err) {
+      // Rethrow so the caller can fall back to its offline statutory engine
+      if (err instanceof ApiError) throw err;
+      throw new ApiError('BACKEND_UNREACHABLE', 'Assistant backend is offline or unreachable');
     }
-
-    return {
-      answer: `Legal Metrology Assistant: Under the Legal Metrology (Packaged Commodities) Rules 2011, declarations including MRP, Net Quantity, Date of Manufacture, and Manufacturer/Packer contact details must adhere to specified font heights and high-contrast placement. (Query: "${question}")`,
-      sources: ['PCR 2011 Rule 6(1)(a)', 'DoCA Gazette Advisory 2023'],
-    };
   }
 
   /**
@@ -431,6 +612,17 @@ class ApiClient {
       confidence = rawConf <= 1.0 ? Math.round(rawConf * 100) : Math.round(rawConf);
     }
 
+    const rawImageUris = Array.isArray(data.imageUris) ? data.imageUris : [];
+    const normalizedImageUris = rawImageUris
+      .map((u: string) => {
+        if (typeof u !== 'string') return '';
+        if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('data:') || u.startsWith('blob:')) {
+          return u;
+        }
+        return `${this.baseUrl}${u.startsWith('/') ? u : `/${u}`}`;
+      })
+      .filter(Boolean);
+
     return {
       id: data.id || data.scan_id || `scan-${Date.now()}`,
       productName: data.productName || data.product_name || 'Scanned Packaged Commodity',
@@ -446,6 +638,8 @@ class ApiClient {
       ocrEnginesUsed: data.ocrEnginesUsed ?? data.ocr_engines_used,
       fields: Array.isArray(data.fields) ? data.fields : [],
       inspectorNotes: Array.isArray(data.inspectorNotes) ? data.inspectorNotes : [],
+      facesScanned: Array.isArray(data.facesScanned) ? data.facesScanned : undefined,
+      imageUris: normalizedImageUris.length > 0 ? normalizedImageUris : undefined,
     };
   }
 }
