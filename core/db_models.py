@@ -29,6 +29,7 @@ class ScanRecordDB(Base):
     ocr_engines_json   = Column(Text,        nullable=False, default="[]")
     scanned_at         = Column(DateTime,    nullable=False, default=datetime.utcnow)
     user_id            = Column(String(64),  nullable=True)
+    notes              = Column(Text,        nullable=True, default="")
 
     @property
     def image_url(self) -> str:

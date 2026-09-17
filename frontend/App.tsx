@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import RootNavigator from './src/navigation/RootNavigator';
+import { AuthProvider } from './src/context/AuthContext';
 
 import { PRAMAN_LOGO_BASE64 } from './src/assets/pramanLogoBase64';
 
@@ -34,8 +35,10 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" backgroundColor="#F4F6F9" />
-      <RootNavigator />
+      <AuthProvider>
+        <StatusBar style="dark" backgroundColor="#F4F6F9" />
+        <RootNavigator />
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

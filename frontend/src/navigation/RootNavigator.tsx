@@ -190,24 +190,35 @@ function MainTabNavigator() {
   );
 }
 
+import { useAuth } from '../context/AuthContext';
+import { ActivityIndicator } from 'react-native';
+
 export default function RootNavigator() {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
-  const [currentUser, setCurrentUser] = useState<OfficerUser | null>(null);
+  const { currentUser, setUser, isLoading } = useAuth();
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('signup');
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#4F46E5" />
+      </View>
+    );
+  }
 
   if (!currentUser) {
     if (authMode === 'signup') {
       return (
         <SignupScreen
-          onSignup={(user) => setCurrentUser(user)}
+          onSignup={(user) => setUser(user)}
           onNavigateToLogin={() => setAuthMode('login')}
         />
       );
     }
     return (
       <LoginScreen
-        onLogin={(user) => setCurrentUser(user)}
+        onLogin={(user) => setUser(user)}
         onNavigateToSignup={() => setAuthMode('signup')}
       />
     );

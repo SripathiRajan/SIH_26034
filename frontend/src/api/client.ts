@@ -398,6 +398,32 @@ class ApiClient {
     return `${this.baseUrl}/api/scans/${scanId}/pdf`;
   }
 
+  /**
+   * Save or update inspector notes on a scan record.
+   */
+  public async patchNotes(scanId: string, notes: string): Promise<{ success: boolean; notes: string }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/scans/${scanId}/notes`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getHeaders(),
+        },
+        body: JSON.stringify({ notes }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return { success: true, notes: data.notes || notes };
+      }
+    } catch (err) {
+      console.warn('[ApiClient] patchNotes error:', err);
+    }
+    if (DEMO_MODE) {
+      return { success: true, notes };
+    }
+    throw new ApiError('PATCH_FAILED', 'Failed to save notes to backend');
+  }
+
   private normalizeScanRecord(data: any, fallbackUri: string): ScanRecord {
     const rawConf = data.complianceConfidence ?? data.compliance_confidence ?? data.authenticityScore ?? data.authenticity_score;
     let confidence = 0;

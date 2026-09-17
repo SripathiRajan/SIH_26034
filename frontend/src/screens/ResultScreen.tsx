@@ -10,6 +10,7 @@ import {
   Platform,
   TextInput,
   Alert,
+  Linking,
   ActivityIndicator,
 } from 'react-native';
 import Svg, { Path, Circle, Line, Rect, Polygon } from 'react-native-svg';
@@ -152,17 +153,37 @@ export default function ResultScreen({ navigation, route }: Props) {
   const handleExportPdf = async () => {
     setExporting(true);
     try {
-      await exportReportAsPdf(scan, 'Field Officer');
+      if (scan.id && !scan.id.startsWith('demo-')) {
+        const downloadUrl = api.getPdfDownloadUrl(scan.id);
+        if (Platform.OS === 'web') {
+          window.open(downloadUrl, '_blank');
+        } else {
+          await Linking.openURL(downloadUrl);
+        }
+      } else {
+        await exportReportAsPdf(scan, 'Field Officer');
+      }
     } catch (e) {
-      console.warn('Export error', e);
+      console.warn('Export error, falling back to client PDF generator:', e);
+      try {
+        await exportReportAsPdf(scan, 'Field Officer');
+      } catch (err) {
+        Alert.alert('Export Failed', 'Could not generate PDF report.');
+      }
+    } finally {
+      setExporting(false);
     }
-    setExporting(false);
   };
 
-  const handleSaveNote = () => {
-    if (inspectorNote.trim()) {
-      setNoteSaved(true);
-      setTimeout(() => setNoteSaved(false), 2000);
+  const handleSaveNote = async () => {
+    if (inspectorNote.trim() && scan.id) {
+      try {
+        await api.patchNotes(scan.id, inspectorNote.trim());
+        setNoteSaved(true);
+        setTimeout(() => setNoteSaved(false), 2000);
+      } catch (err: any) {
+        Alert.alert('Save Note Failed', err.message || 'Could not save note to server');
+      }
     }
   };
 

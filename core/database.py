@@ -26,3 +26,13 @@ def create_tables():
     # Import here to avoid circular imports at module load time
     from core.db_models import ScanRecordDB, UserDB, ProductMasterDB  # noqa
     Base.metadata.create_all(bind=engine)
+
+    # Auto-migration for newly added columns in SQLite
+    if DATABASE_URL.startswith("sqlite"):
+        with engine.connect() as conn:
+            from sqlalchemy import text
+            try:
+                conn.execute(text("ALTER TABLE scan_records ADD COLUMN notes TEXT DEFAULT ''"))
+                conn.commit()
+            except Exception:
+                pass

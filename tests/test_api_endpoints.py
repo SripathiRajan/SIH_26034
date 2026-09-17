@@ -11,12 +11,13 @@ import cv2
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from core.database import SessionLocal
+from core.database import SessionLocal, create_tables
 from core.db_models import UserDB, ScanRecordDB, ProductMasterDB
 
 
 @pytest.fixture(scope="module")
 def client():
+    create_tables()
     return TestClient(app)
 
 
@@ -220,6 +221,16 @@ def test_scans_list_detail_and_delete(client, auth_headers):
     detail_resp = client.get(f"/api/scans/{scan_id}", headers=auth_headers)
     assert detail_resp.status_code == 200
     assert detail_resp.json()["id"] == scan_id
+
+    # 2.5 Patch notes (401 without auth, 200 with auth)
+    assert client.patch(f"/api/scans/{scan_id}/notes", json={"notes": "Package seized under §39"}).status_code == 401
+    patch_resp = client.patch(f"/api/scans/{scan_id}/notes", json={"notes": "Package seized under §39"}, headers=auth_headers)
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["notes"] == "Package seized under §39"
+
+    # Verify detail returns updated notes
+    detail_with_notes = client.get(f"/api/scans/{scan_id}", headers=auth_headers)
+    assert detail_with_notes.json()["notes"] == "Package seized under §39"
 
     # 3. Delete scan (401 without auth, 200 with auth)
     assert client.delete(f"/api/scans/{scan_id}").status_code == 401

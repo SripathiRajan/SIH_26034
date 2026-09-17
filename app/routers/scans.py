@@ -66,6 +66,7 @@ def _format_scan_record(r: ScanRecordDB) -> Dict[str, Any]:
         "ocrEnginesUsed": r.engines_list(),
         "fields": r.fields_list(),
         "gtin": r.gtin,
+        "notes": getattr(r, "notes", "") or "",
     }
 
 
@@ -247,6 +248,25 @@ def delete_scan(scan_id: str, user=Depends(require_current_user), db: Session = 
     db.delete(record)
     db.commit()
     return {"status": "success", "id": scan_id}
+
+
+class UpdateNotesRequest(BaseModel):
+    notes: str
+
+
+@router.patch("/api/scans/{scan_id}/notes")
+def update_scan_notes(
+    scan_id: str,
+    payload: UpdateNotesRequest,
+    user=Depends(require_current_user),
+    db: Session = Depends(get_db),
+):
+    record = db.query(ScanRecordDB).filter(ScanRecordDB.id == scan_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Scan record not found")
+    record.notes = payload.notes
+    db.commit()
+    return {"status": "success", "id": scan_id, "notes": record.notes}
 
 
 @router.get("/api/scans/{scan_id}/pdf")
