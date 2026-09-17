@@ -24,3 +24,4 @@ python-dotenv>=1.0.0
 pydantic-settings>=2.0.0
 slowapi>=0.1.9
 pytest>=8.0.0
+alembic>=1.13.0

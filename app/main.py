@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from core.config import UPLOAD_DIR, CORS_ORIGINS
+from core.config import UPLOAD_DIR, CORS_ORIGINS, DATABASE_URL
 from core.database import create_tables
 from core.logger import logger
 from core.limiter import limiter
@@ -45,9 +45,36 @@ if os.path.exists(UPLOAD_DIR):
     app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
+def _verify_schema_version():
+    """Refuse to boot against a DB whose alembic revision is not the current head."""
+    import sqlalchemy
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    from alembic.runtime.migration import MigrationContext
+
+    try:
+        cfg = Config("alembic.ini")
+        head = ScriptDirectory.from_config(cfg).get_current_head()
+        with sqlalchemy.create_engine(DATABASE_URL).connect() as conn:
+            ctx = MigrationContext.configure(conn)
+            current = ctx.get_current_revision()
+        if current is not None and current != head:
+            raise RuntimeError(
+                f"Database schema revision {current} != expected {head}. "
+                "Run `python -m alembic upgrade head` before starting the server."
+            )
+    except RuntimeError:
+        raise
+    except Exception as e:
+        # Unmigrated/legacy DBs are allowed through (create_tables handles them);
+        # only a *stale known revision* is fatal.
+        logger.warning(f"Schema version check skipped: {e}")
+
+
 @app.on_event("startup")
 def startup_event():
     import threading
+    _verify_schema_version()
     create_tables()
     logger.info("✓ PRAMAN v4 database initialized")
 
