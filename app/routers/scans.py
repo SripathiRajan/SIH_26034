@@ -27,13 +27,11 @@ from core.auth import get_current_user, require_current_user
 from core.limiter import limiter
 from pipeline.ensemble_pipeline import ensemble_scan
 from api.response_mapper import pipeline_report_to_scan_record
-from app.services.scan_service import ScanService
 import api.gtin_lookup as gtin_lookup
 
 router = APIRouter(tags=["Scans & Compliance Analysis"])
 executor = ThreadPoolExecutor(max_workers=4)
 IST = timezone(timedelta(hours=5, minutes=30))
-_scan_service = ScanService()
 
 
 def _format_scan_record(r: ScanRecordDB) -> Dict[str, Any]:

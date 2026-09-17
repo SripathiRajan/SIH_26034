@@ -21,6 +21,50 @@ FIELD_MAP_CB2_TO_CB1 = {
 }
 
 
+def normalize_date_token(token: str) -> str:
+    """
+    Normalizes OCR errors in dot-matrix and stamped dates:
+    - Dot matrix month corrections (1UN/IUN/!UN/N2026 -> JUN, 0CT -> OCT, 0EC/OEC -> DEC, etc.)
+    - Disambiguates MM/YY -> MM/20YY (if 2-digit year)
+    - Disambiguates DD/MM/YY -> DD/MM/20YY
+    """
+    if not token:
+        return token
+    t = token.strip()
+    t = re.sub(r"[\._\-\s]+", "/", t)
+
+    dot_matrix_map = [
+        (r"\b(1UN|IUN|!UN|UN)([\/\-]?)", r"JUN\2"),
+        (r"\b(0CT|O CT)([\/\-]?)", r"OCT\2"),
+        (r"\b(0EC|OEC)([\/\-]?)", r"DEC\2"),
+        (r"\b(F3B|FE8)([\/\-]?)", r"FEB\2"),
+        (r"\b(S3P|SE P)([\/\-]?)", r"SEP\2"),
+        (r"\b(M4R|MA R)([\/\-]?)", r"MAR\2"),
+        (r"\b(A0R|APRIL|A PR)([\/\-]?)", r"APR\2"),
+        (r"\b(M4Y|MA Y)([\/\-]?)", r"MAY\2"),
+        (r"\b(1UL|IUL|!UL)([\/\-]?)", r"JUL\2"),
+        (r"\b(AU6|AU G)([\/\-]?)", r"AUG\2"),
+        (r"\b(N0V|NO V)([\/\-]?)", r"NOV\2"),
+        (r"\b(1AN|IAN)([\/\-]?)", r"JAN\2"),
+    ]
+    for pattern, repl in dot_matrix_map:
+        t = re.sub(pattern, repl, t, flags=re.I)
+
+    # Disambiguate MM/YY to MM/20YY
+    m_my = re.match(r"^([A-Za-z]{3}|\d{1,2})[\/\-](\d{2})$", t)
+    if m_my:
+        month_part, yr_part = m_my.group(1), m_my.group(2)
+        t = f"{month_part}/20{yr_part}"
+
+    # Disambiguate DD/MM/YY to DD/MM/20YY
+    m_dmy = re.match(r"^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$", t)
+    if m_dmy:
+        d, m, y = m_dmy.group(1), m_dmy.group(2), m_dmy.group(3)
+        t = f"{d}/{m}/20{y}"
+
+    return t
+
+
 def _extract_table_dates(full_text: str, all_results: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
     """
     Extracts packaging date (manufacture_date) and use_by date from table/column layouts,
@@ -31,22 +75,12 @@ def _extract_table_dates(full_text: str, all_results: List[Dict[str, Any]]) -> T
 
     # 1. Search for fused dual dates like 'N20260CT/2026', 'JUN/2026OCT/2026'
     fused_match = re.search(
-        r"([A-Za-z0-9]{1,4}[\/\-]?(?:20\d{2}))\s*([0-9A-Za-z]{3,4}[\/\-]20\d{2})",
+        r"([A-Za-z0-9]{1,4}[\/\-]?(?:20\d{2}|\d{2}))\s*([0-9A-Za-z]{3,4}[\/\-]?(?:20\d{2}|\d{2}))",
         full_text,
         re.I
     )
     if fused_match:
-        d1, d2 = fused_match.group(1).strip(), fused_match.group(2).strip()
-        # Normalize dot-matrix representations: 'N2026' -> 'JUN/2026', '0CT' -> 'OCT'
-        if d1.upper().startswith("N") or d1.upper().startswith("UN"):
-            d1 = "JUN/" + d1[-4:]
-        elif re.match(r"^0CT", d1, re.I):
-            d1 = "OCT" + d1[3:]
-
-        if re.match(r"^0CT", d2, re.I):
-            d2 = "OCT" + d2[3:]
-        elif d2.upper().startswith("N") or d2.upper().startswith("UN"):
-            d2 = "JUN/" + d2[-4:]
+        d1, d2 = normalize_date_token(fused_match.group(1)), normalize_date_token(fused_match.group(2))
         return d1, d2
 
     # 2. Search for date candidates across full_text and all_results
@@ -54,9 +88,9 @@ def _extract_table_dates(full_text: str, all_results: List[Dict[str, Any]]) -> T
     date_candidates: List[str] = []
     seen = set()
     for text in raw_texts:
-        found = re.findall(r"\b([0-9A-Za-z]{3,4}[\/\-]20\d{2}|\d{1,2}[\/\-]20\d{2})\b", text, re.I)
+        found = re.findall(r"\b([0-9A-Za-z]{2,4}[\/\-](?:20\d{2}|\d{2})|\d{1,2}[\/\-]\d{1,2}[\/\-](?:20\d{2}|\d{2}))\b", text, re.I)
         for f in found:
-            f_norm = re.sub(r"^0CT", "OCT", f, flags=re.I)
+            f_norm = normalize_date_token(f)
             if f_norm.lower() not in seen:
                 seen.add(f_norm.lower())
                 date_candidates.append(f_norm)
@@ -118,9 +152,15 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
 
     extracted = {}
     for field_key, field_info in MANDATORY_FIELDS.items():
+        # Check if flap pointer specifically mentions this field
+        is_flap_pointed = flap_detected and field_key in {"mrp", "manufacture_date", "use_by", "net_quantity"}
+
         match = field_info["pattern"].search(full_text)
+        is_field_found = False
+        captured_val = None
+        matched_line = None
+
         if match:
-            captured_val = None
             if match.groups():
                 for g in match.groups():
                     if g and g.strip():
@@ -129,10 +169,34 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
             if not captured_val:
                 captured_val = match.group(0).strip()
 
-            if field_key == "fssai" and captured_val:
-                captured_val = re.sub(r"\D", "", captured_val)
-
             matched_line = match.group(0).strip()
+
+            # Normalization per field
+            if field_key == "mrp" and captured_val:
+                clean_mrp = re.sub(r"^[^\d]*", "", captured_val)
+                clean_mrp = re.sub(r"[^\d.]*$", "", clean_mrp)
+                if clean_mrp:
+                    captured_val = clean_mrp
+                    is_field_found = True
+            elif field_key == "fssai":
+                digits = re.sub(r"\D", "", captured_val)
+                if len(digits) == 14:
+                    captured_val = digits
+                    is_field_found = True
+                else:
+                    m14 = re.search(r"\b([12]\d{13}|\d{14})\b", matched_line)
+                    if m14:
+                        captured_val = m14.group(1)
+                        is_field_found = True
+                    else:
+                        is_field_found = False
+            elif field_key in {"manufacture_date", "use_by"} and captured_val:
+                captured_val = normalize_date_token(captured_val)
+                is_field_found = True
+            else:
+                is_field_found = True
+
+        if is_field_found and captured_val:
             source = "ensemble"
             conf = 0.90
             for r in all_results:
@@ -143,7 +207,7 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
 
             extracted[field_key] = {
                 "found": True,
-                "value": matched_line,
+                "value": matched_line or captured_val,
                 "captured": captured_val,
                 "confidence": conf,
                 "source": source,
@@ -152,12 +216,34 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                 "location": "ON_PANEL"
             }
         else:
+            # If flap pointer was detected and instructed user to flip, do NOT hallucinate from fallback
+            if is_flap_pointed:
+                extracted[field_key] = {
+                    "found": False,
+                    "value": None,
+                    "captured": None,
+                    "confidence": 0.0,
+                    "source": None,
+                    "rule": field_info["rule"],
+                    "label": field_info["label"],
+                    "location": "SEE_FLAP"
+                }
+                continue
+
             # Check if CB2 declaration extractor found this field
             cb2_key = next((k for k, v in FIELD_MAP_CB2_TO_CB1.items() if v == field_key), None)
             cb2_data = cb2_decls.get(cb2_key) if cb2_key else None
 
             if cb2_data and cb2_data.get("found"):
                 raw_val = cb2_data.get("rawValue") or str(cb2_data.get("parsedValue") or "")
+                if field_key == "fssai":
+                    digits = re.sub(r"\D", "", raw_val)
+                    if len(digits) != 14:
+                        raw_val = None
+                if field_key in {"manufacture_date", "use_by"} and raw_val:
+                    raw_val = normalize_date_token(raw_val)
+
+            if cb2_data and cb2_data.get("found") and raw_val:
                 extracted[field_key] = {
                     "found": True,
                     "value": raw_val,
@@ -170,7 +256,7 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                     "parsedValue": cb2_data.get("parsedValue")
                 }
             else:
-                location = "SEE_FLAP" if (flap_detected and field_key in {"mrp", "manufacture_date", "use_by", "net_quantity"}) else "MISSING"
+                location = "SEE_FLAP" if is_flap_pointed else "MISSING"
                 extracted[field_key] = {
                     "found": False,
                     "value": None,
@@ -182,8 +268,8 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                     "location": location
                 }
 
-    # 4. Table / column dual-date resolution fallback for manufacture_date & use_by
-    if not extracted["manufacture_date"]["found"] or not extracted["use_by"]["found"]:
+    # 4. Table / column dual-date resolution fallback for manufacture_date & use_by (only if not on flap)
+    if not flap_detected and (not extracted["manufacture_date"]["found"] or not extracted["use_by"]["found"]):
         mfg_date, exp_date = _extract_table_dates(full_text, all_results)
         if mfg_date and not extracted["manufacture_date"]["found"]:
             extracted["manufacture_date"] = {
@@ -217,11 +303,15 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                 cap = None
                 for g in f_match.groups():
                     if g and g.strip():
-                        cap = re.sub(r"\D", "", g.strip())
-                        break
+                        digits = re.sub(r"\D", "", g.strip())
+                        if len(digits) == 14:
+                            cap = digits
+                            break
                 if not cap:
-                    cap = re.sub(r"\D", "", f_match.group(0).strip())
-                if len(cap) >= 10:
+                    all_digits = re.findall(r"\b([12]\d{13}|\d{14})\b", t)
+                    if all_digits:
+                        cap = all_digits[0]
+                if cap and len(cap) == 14:
                     extracted["fssai"] = {
                         "found": True,
                         "value": t.strip(),

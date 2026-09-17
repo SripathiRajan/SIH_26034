@@ -60,21 +60,7 @@ class EasyOCREngine(BaseOCREngine):
             except Exception as exc:
                 logger.error(f"EasyOCR error: {exc}")
         else:
-            h, w = image.shape[:2]
-            tokens = [
-                TextPolygon(
-                    text="Mfg Date: 08/2026",
-                    confidence=0.88,
-                    bbox=[[w * 0.1, h * 0.5], [w * 0.45, h * 0.5], [w * 0.45, h * 0.6], [w * 0.1, h * 0.6]],
-                    engine=self.name,
-                ),
-                TextPolygon(
-                    text="Country of Origin: India",
-                    confidence=0.90,
-                    bbox=[[w * 0.1, h * 0.65], [w * 0.55, h * 0.65], [w * 0.55, h * 0.75], [w * 0.1, h * 0.75]],
-                    engine=self.name,
-                ),
-            ]
+            tokens = []
 
         elapsed_ms = (time.time() - start_time) * 1000
         return OCRResult.from_tokens(

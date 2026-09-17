@@ -11,9 +11,7 @@ from app.vision.authenticity import AuthenticityVerifier
 from app.extraction.reading_order import ReadingOrderResolver, ReadingOrderReconstructor
 from app.extraction.declaration_parser import DeclarationExtractor, DeclarationParser
 from app.validation.rule_engine import RuleEngine
-from app.validation.field_validators import FieldValidators
 from app.ocr.engine_base import TextPolygon
-from app.services.scan_service import ScanService
 
 
 # =============================================================================
@@ -325,30 +323,28 @@ def test_authenticity_verifier_unregistered_or_empty_brand():
 
 
 # =============================================================================
-# 6. End-to-End ScanService Orchestration Test
+# 6. End-to-End Unified Pipeline Orchestration Test
 # =============================================================================
 
-def test_scan_service_end_to_end():
-    service = ScanService()
+def test_unified_pipeline_end_to_end():
+    from pipeline.compliance_engine import generate_compliance_report
+    from pipeline.field_extractor import extract_fields
+    from api.response_mapper import pipeline_report_to_scan_record
 
-    # Create a synthetic image with text
-    img = np.zeros((300, 500, 3), dtype=np.uint8)
-    cv2.putText(img, "MRP Rs. 150 (Incl. of all taxes)", (20, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-    cv2.putText(img, "Net Wt: 250 g", (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-    cv2.putText(img, "care@brand.in 1800-111-222", (20, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+    raw_results = [
+        {"text": "MRP Rs. 150 (Incl. of all taxes)", "confidence": 0.95, "source": "paddle"},
+        {"text": "Net Wt: 250 g", "confidence": 0.94, "source": "paddle"},
+        {"text": "Consumer Care: care@brand.in 1800-111-222", "confidence": 0.91, "source": "paddle"},
+    ]
 
-    _, encoded_jpg = cv2.imencode(".jpg", img)
-    image_bytes = encoded_jpg.tobytes()
+    extracted, full_text, flap_info = extract_fields(raw_results)
+    report = generate_compliance_report(extracted, flap_info, "test_sample.jpg", 0.35)
+    scan_record = pipeline_report_to_scan_record(report, "scan_test_123")
 
-    result = service.process_scan(image_bytes=image_bytes, gtin=None, use_ensemble=False)
-
-    # Verify response matches contract
-    assert "id" in result
-    assert "productName" in result
-    assert "brand" in result
-    assert "status" in result
-    assert result["status"] in ["pass", "warning", "fail", "needs_review"]
-    assert "authenticityScore" in result
-    assert "fields" in result
-    assert isinstance(result["fields"], list)
-    assert len(result["fields"]) > 0
+    assert scan_record["id"] == "scan_test_123"
+    assert "productName" in scan_record
+    assert "brand" in scan_record
+    assert scan_record["status"] in ["pass", "warning", "fail"]
+    assert "complianceConfidence" in scan_record
+    assert isinstance(scan_record["fields"], list)
+    assert len(scan_record["fields"]) > 0

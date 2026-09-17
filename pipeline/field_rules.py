@@ -8,7 +8,7 @@ MANDATORY_FIELDS = {
     "net_quantity": {
         "label": "Net Quantity",
         "pattern": re.compile(
-            r"(?:net\s*(?:quantity|qty|wt\.?|weight)?|weight|qty)\s*[:\-]?\s*([\d.,]+)\s*(g|gm|gms|kg|ml|l|ltr|litre|oz|lb)\b",
+            r"(?:net\s*(?:quantity|qty|wt\.?|weight)?|weight|qty)\s*[:\-]?\s*([\d.,]+)\s*(g|gm|gms|g\.|kg|ml|l|ltr|litre|litres|m|cm|mm|oz|lb|count|units?|tablets?|capsules?|n|u)\b",
             re.IGNORECASE
         ),
         "rule": "LM Rule §6(1)(c) — Net quantity mandatory in standard metric units"
@@ -17,7 +17,7 @@ MANDATORY_FIELDS = {
         "label": "Maximum Retail Price (MRP)",
         "pattern": re.compile(
             r"(?:maximum\s+retail\s+price|mrp|m\.r\.p\.?)\s*(?:\(incl\.?\s*of\s*all\s*taxes?\))?"
-            r".*?(?:rs\.?|₹|inr)\s*([\d,]+\.?\d*)|(?:rs\.?|₹)\s*([\d,]+\.?\d*)",
+            r"[ \t\:\-\.]*(?:rs\.?|₹|\?|inr)?[ \t\:\-\.]*([\d,]+\.?\d{1,2}|[\d,]+)|(?:rs\.?|₹)[ \t]*([\d,]+\.?\d*)",
             re.IGNORECASE
         ),
         "rule": "LM Rule §6(1)(e) — MRP inclusive of all taxes"
@@ -34,7 +34,7 @@ MANDATORY_FIELDS = {
         "label": "Month & Year of Manufacture",
         "pattern": re.compile(
             r"(?:mfg\.?\s*date|manufactured\s*on|packed\s*on|date\s*of\s*(?:mfg|pkg|packing|packaging)\.?|dom|mfd|pkd(?:\s*on|\s*date)?)"
-            r"\s*[:\-]?\s*([a-z0-9]{3,}[\s\/\-]\d{4}|\d{1,2}[\/-]\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\b\d{4}\b)",
+            r"[ \t\:\-]*([a-z0-9]{2,}[\s\/\-]\d{2,4}|\d{1,2}[\/-]\d{2,4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\b\d{4}\b)",
             re.IGNORECASE
         ),
         "rule": "LM Rule §6(1)(d) — Month and year of manufacture/packing"
@@ -42,8 +42,8 @@ MANDATORY_FIELDS = {
     "use_by": {
         "label": "Use By / Best Before / Expiry",
         "pattern": re.compile(
-            r"(?:use\s*by|best\s*before|expiry|exp\.?|expires?|bb\.?)\s*[:\-]?\s*"
-            r"([a-z0-9]{3,}[\s\/\-]\d{4}|\d{1,2}[\/-]\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\w+\/\d{4}|\d+\s+months)",
+            r"(?:use\s*by|best\s*before|expiry|exp\.?|expires?|bb\.?)[ \t\:\-]*"
+            r"([a-z0-9]{2,}[\s\/\-]\d{2,4}|\d{1,2}[\/-]\d{2,4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\w+\/\d{2,4}|\d+\s+months)",
             re.IGNORECASE
         ),
         "rule": "LM Rule §6(1)(da) — Best before / use by date"
@@ -60,7 +60,7 @@ MANDATORY_FIELDS = {
     "fssai": {
         "label": "FSSAI License Number",
         "pattern": re.compile(
-            r"(?:fssai|fsat|fssal|issai|lic(?:ense)?\.?\s*(?:no\.?)?|lic\s*#)[\s\S]{0,25}?[:\-]?\s*([0-9\s]{10,18})|\b([0-9]{14})\b",
+            r"(?:fssai|fsat|fssal|issai|lic(?:ense)?\.?\s*(?:no\.?)?|lic\s*#)[\s\S]{0,30}?[:\-]?\s*([0-9\s]{14,20})|\b([12]\d{13}|\d{14})\b",
             re.IGNORECASE
         ),
         "rule": "FSS (Labelling and Display) Regulations 2020 §2.1.1"

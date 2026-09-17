@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional
 STATUS_MAP = {
     "COMPLIANT":       "pass",
     "ACTION_REQUIRED": "warning",
+    "NEEDS_REVIEW":    "warning",
     "NON-COMPLIANT":   "fail",
     "NON_COMPLIANT":   "fail",
 }
@@ -33,9 +34,13 @@ def _map_status(pipeline_status: str) -> str:
 
 
 def _field_status(field_data: Dict) -> str:
-    if field_data.get("found"):
-        return "pass"
-    return "warning" if field_data.get("location") == "SEE_FLAP" else "fail"
+    if not field_data.get("found"):
+        return "warning" if field_data.get("location") == "SEE_FLAP" else "fail"
+    if field_data.get("is_valid") is False:
+        return "fail"
+    if field_data.get("needs_review") or field_data.get("status") == "needs_review":
+        return "warning"
+    return "pass"
 
 
 def _compliance_confidence(compliance_score: float) -> int:
@@ -81,9 +86,9 @@ def _build_field_checks(fields: Dict) -> List[Dict]:
     for field_name, data in fields.items():
         fstatus = _field_status(data)
         if fstatus == "warning":
-            violation = "Declaration found on package flap — please scan bottom face"
+            violation = data.get("review_reason") or "Declaration found on package flap — please scan bottom face"
         elif fstatus == "fail":
-            violation = f"{data.get('label', field_name)} not found on any visible panel"
+            violation = data.get("violation_reason") or f"{data.get('label', field_name)} not found on any visible panel"
         else:
             violation = None
 

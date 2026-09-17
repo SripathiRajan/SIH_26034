@@ -67,28 +67,8 @@ class PaddleOCREngine(BaseOCREngine):
             except Exception as exc:
                 logger.error(f"PaddleOCR execution error: {exc}")
         else:
-            # Fallback stub for dev environments
-            h, w = image.shape[:2]
-            tokens = [
-                TextPolygon(
-                    text="MRP Rs. 250.00 (Incl. of all taxes)",
-                    confidence=0.94,
-                    bbox=[[w * 0.1, h * 0.2], [w * 0.6, h * 0.2], [w * 0.6, h * 0.3], [w * 0.1, h * 0.3]],
-                    engine=self.name,
-                ),
-                TextPolygon(
-                    text="Net Wt: 1.0 kg",
-                    confidence=0.92,
-                    bbox=[[w * 0.1, h * 0.35], [w * 0.4, h * 0.35], [w * 0.4, h * 0.45], [w * 0.1, h * 0.45]],
-                    engine=self.name,
-                ),
-                TextPolygon(
-                    text="Consumer Care: care@brand.com 1800-111-222",
-                    confidence=0.91,
-                    bbox=[[w * 0.1, h * 0.5], [w * 0.8, h * 0.5], [w * 0.8, h * 0.6], [w * 0.1, h * 0.6]],
-                    engine=self.name,
-                ),
-            ]
+            # Dev environments without paddleocr installed return empty detections
+            tokens = []
 
         elapsed_ms = (time.time() - start_time) * 1000
         return OCRResult.from_tokens(

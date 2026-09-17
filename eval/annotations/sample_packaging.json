@@ -1,0 +1,110 @@
+[
+  {
+    "image_file": "sample_biscuit_pack.jpg",
+    "gtin": "8901030383451",
+    "product_name": "Digestive High Fibre Biscuits",
+    "brand": "NutriChoice",
+    "flap_pointer": {
+      "present": false,
+      "text": null
+    },
+    "ground_truth_fields": {
+      "net_quantity": {
+        "declared": true,
+        "magnitude": 250,
+        "unit": "g",
+        "rule": "LM Rule §6(1)(c)"
+      },
+      "mrp": {
+        "declared": true,
+        "amount": 45.00,
+        "inclusive_of_taxes": true,
+        "rule": "LM Rule §6(1)(e)"
+      },
+      "manufacturer": {
+        "declared": true,
+        "text": "Britannia Industries Ltd, 5/1A Hungerford Street, Kolkata",
+        "rule": "LM Rule §6(1)(a)"
+      },
+      "manufacture_date": {
+        "declared": true,
+        "date_string": "06/2026",
+        "rule": "LM Rule §6(1)(d)"
+      },
+      "use_by": {
+        "declared": true,
+        "date_string": "12/2026",
+        "rule": "LM Rule §6(1)(da)"
+      },
+      "consumer_care": {
+        "declared": true,
+        "contact": "1800-4254449 feedback@britannia.co.in",
+        "rule": "LM Rule §6(2)"
+      },
+      "fssai": {
+        "declared": true,
+        "license_no": "10015043001129",
+        "rule": "FSS (Labelling and Display) Regulations 2020 §2.1.1"
+      },
+      "country_of_origin": {
+        "declared": true,
+        "country": "India",
+        "rule": "LM Rule §6(1)(aa)"
+      }
+    }
+  },
+  {
+    "image_file": "sample_tea_pack.jpg",
+    "gtin": "8901030005432",
+    "product_name": "Premium CTC Black Tea",
+    "brand": "Red Label",
+    "flap_pointer": {
+      "present": true,
+      "text": "See bottom of pack for Date of Pkg and MRP"
+    },
+    "ground_truth_fields": {
+      "net_quantity": {
+        "declared": true,
+        "magnitude": 500,
+        "unit": "g",
+        "rule": "LM Rule §6(1)(c)"
+      },
+      "mrp": {
+        "declared": false,
+        "amount": null,
+        "inclusive_of_taxes": false,
+        "rule": "LM Rule §6(1)(e)"
+      },
+      "manufacturer": {
+        "declared": true,
+        "text": "Hindustan Unilever Ltd, Unilever House, B.D. Sawant Marg, Mumbai",
+        "rule": "LM Rule §6(1)(a)"
+      },
+      "manufacture_date": {
+        "declared": false,
+        "date_string": null,
+        "rule": "LM Rule §6(1)(d)"
+      },
+      "use_by": {
+        "declared": false,
+        "date_string": null,
+        "rule": "LM Rule §6(1)(da)"
+      },
+      "consumer_care": {
+        "declared": true,
+        "contact": "1800-10-22-221 lever.care@unilever.com",
+        "rule": "LM Rule §6(2)"
+      },
+      "fssai": {
+        "declared": true,
+        "license_no": "10013022001897",
+        "rule": "FSS (Labelling and Display) Regulations 2020 §2.1.1"
+      },
+      "country_of_origin": {
+        "declared": true,
+        "country": "India",
+        "rule": "LM Rule §6(1)(aa)"
+      }
+    }
+  }
+]

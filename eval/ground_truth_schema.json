@@ -1,0 +1,114 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PRAMAN Ground Truth Packaging Annotation Schema",
+  "type": "object",
+  "required": ["image_file", "product_name", "brand", "ground_truth_fields"],
+  "properties": {
+    "image_file": {
+      "type": "string",
+      "description": "Relative filename of the packaged commodity image"
+    },
+    "gtin": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{8,14}$",
+      "description": "EAN/UPC/GTIN barcode number"
+    },
+    "product_name": {
+      "type": "string",
+      "description": "Statutory generic name or product title"
+    },
+    "brand": {
+      "type": "string",
+      "description": "Brand name of manufacturer/packer"
+    },
+    "flap_pointer": {
+      "type": "object",
+      "properties": {
+        "present": { "type": "boolean" },
+        "text": { "type": ["string", "null"] }
+      },
+      "required": ["present"]
+    },
+    "ground_truth_fields": {
+      "type": "object",
+      "description": "Mandatory Legal Metrology declarations",
+      "required": ["net_quantity", "mrp", "manufacturer", "manufacture_date", "consumer_care"],
+      "properties": {
+        "net_quantity": {
+          "type": "object",
+          "properties": {
+            "declared": { "type": "boolean" },
+            "magnitude": { "type": ["number", "null"] },
+            "unit": { "type": ["string", "null"] },
+            "rule": { "type": "string", "default": "LM Rule §6(1)(c)" }
+          },
+          "required": ["declared"]
+        },
+        "mrp": {
+          "type": "object",
+          "properties": {
+            "declared": { "type": "boolean" },
+            "amount": { "type": ["number", "null"] },
+            "inclusive_of_taxes": { "type": "boolean" },
+            "rule": { "type": "string", "default": "LM Rule §6(1)(e)" }
+          },
+          "required": ["declared"]
+        },
+        "manufacturer": {
+          "type": "object",
+          "properties": {
+            "declared": { "type": "boolean" },
+            "text": { "type": ["string", "null"] },
+            "rule": { "type": "string", "default": "LM Rule §6(1)(a)" }
+          },
+          "required": ["declared"]
+        },
+        "manufacture_date": {
+          "type": "object",
+          "properties": {
+            "declared": { "type": "boolean" },
+            "date_string": { "type": ["string", "null"] },
+            "rule": { "type": "string", "default": "LM Rule §6(1)(d)" }
+          },
+          "required": ["declared"]
+        },
+        "use_by": {
+          "type": "object",
+          "properties": {
+            "declared": { "type": "boolean" },
+            "date_string": { "type": ["string", "null"] },
+            "rule": { "type": "string", "default": "LM Rule §6(1)(da)" }
+          },
+          "required": ["declared"]
+        },
+        "consumer_care": {
+          "type": "object",
+          "properties": {
+            "declared": { "type": "boolean" },
+            "contact": { "type": ["string", "null"] },
+            "rule": { "type": "string", "default": "LM Rule §6(2)" }
+          },
+          "required": ["declared"]
+        },
+        "fssai": {
+          "type": "object",
+          "properties": {
+            "declared": { "type": "boolean" },
+            "license_no": { "type": ["string", "null"] },
+            "rule": { "type": "string", "default": "FSS (Labelling and Display) Regulations 2020 §2.1.1" }
+          },
+          "required": ["declared"]
+        },
+        "country_of_origin": {
+          "type": "object",
+          "properties": {
+            "declared": { "type": "boolean" },
+            "country": { "type": ["string", "null"] },
+            "rule": { "type": "string", "default": "LM Rule §6(1)(aa)" }
+          },
+          "required": ["declared"]
+        }
+      }
+    }
+  }
+}
