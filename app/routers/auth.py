@@ -63,7 +63,7 @@ def _authenticate_and_issue_token(identifier: str, password: str, db: Session) -
         "name": user.full_name or user.username or "Officer",
         "role": user.role,
         "department": "Legal Metrology Enforcement",
-        "zone": user.zone or "North Zone",
+        "zone": user.zone,
         "badgeId": f"LM-{user.id[:6].upper()}",
     }
     return LoginResponse(
@@ -139,6 +139,6 @@ def get_me(current_user: Optional[UserDB] = Depends(get_current_user)):
         "username": current_user.username or current_user.email,
         "email": current_user.email,
         "role": current_user.role,
-        "zone": current_user.zone or "North Zone",
+        "zone": current_user.zone,
         "badgeId": f"LM-{current_user.id[:6].upper()}",
     }

@@ -85,13 +85,13 @@
     ]
   },
   {
-    "id": "r-rule6-1f",
-    "section": "Rule 6(1)(f)",
+    "id": "r-rule6-1da",
+    "section": "Rule 6(1)(da)",
     "title": "Best Before / Expiry Date (Use By Date)",
     "category": "mandatory",
     "summary": "For commodities that become unfit for consumption after a period, \"Best Before\" or \"Use By\" date must be declared.",
     "fullText": "Where the commodity is likely to deteriorate or become less fit for human consumption within a period declared by the concerned regulation, such as food products or cosmetics, the package shall bear either:\n(i) \"Best before …………\" with the month and year, or\n(ii) \"Use by …………\" with the month and year.\n\nThe date should be displayed prominently. For products with shelf life up to 3 months, day-month-year format is preferred.",
-    "amendment": "Rule amended 2019. Food Safety regulations cross-applicable via FSSAI notifications.",
+    "amendment": "Clause 6(1)(da) inserted by the Legal Metrology (Packaged Commodities) Amendment Rules, 2017 (G.S.R. 629(E)). Food Safety regulations cross-applicable via FSSAI notifications.",
     "penalty": "Selling after expiry date: criminal liability. Non-declaration: penalty under Section 36, LMA 2009.",
     "tags": [
       "Mandatory",
@@ -102,13 +102,13 @@
     ]
   },
   {
-    "id": "r-rule6-1g",
-    "section": "Rule 6(1)(g)",
+    "id": "r-rule6-2",
+    "section": "Rule 6(2)",
     "title": "Consumer Care Contact Details",
     "category": "consumer-care",
-    "summary": "Name, address, telephone number AND email address of the consumer grievance contact are all mandatory.",
+    "summary": "Name, address, telephone number and email address of the consumer grievance contact are all mandatory.",
     "fullText": "Every package shall bear the name, address, telephone number and e-mail address of the person who or the office which can be contacted in case of consumer complaints.\n\nAll four elements are mandatory:\n1. Name or designation of the responsible person / department\n2. Complete postal address (not a PO Box alone)\n3. Telephone number (toll-free or regular with STD code)\n4. Email address\n\nAll details must be legible and accurate.",
-    "amendment": "Amended 2017 to add mandatory email address. 2022: Toll-free helpline strongly recommended for national brands.",
+    "amendment": "Sub-rule 6(2) inserted by the 2017 Amendment Rules (G.S.R. 629(E)) to add mandatory contact and email requirements.",
     "penalty": "Fine under Section 36, LMA 2009 for non-compliance with any of the four required elements.",
     "tags": [
       "Mandatory",
@@ -120,13 +120,13 @@
     ]
   },
   {
-    "id": "r-rule6-1m",
-    "section": "Rule 6(1)(m)",
+    "id": "r-rule6-1aa",
+    "section": "Rule 6(1)(aa)",
     "title": "Country of Origin for Imported Packaged Goods",
     "category": "mandatory",
     "summary": "Country of origin must be declared conspicuously on imported packages.",
     "fullText": "On every imported package, the name of the country of origin or manufacture or assembly shall be mentioned conspicuously in English or Hindi.\n\nFormats: \"Made in China\", \"Product of USA\", \"Assembled in India from imported components\".\n\nThe declaration must appear on the principal display panel or the information panel in a font size not less than that required for MRP.",
-    "amendment": "Mandatory enforcement notification 2020. Reiterated under Public Procurement Order for Government purchases.",
+    "amendment": "Clause 6(1)(aa) inserted by the Legal Metrology (Packaged Commodities) Amendment Rules, 2017 (G.S.R. 629(E)).",
     "penalty": "Import without proper origin marking is an offence under Customs Act and Legal Metrology Act.",
     "tags": [
       "Mandatory",

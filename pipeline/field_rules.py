@@ -1,6 +1,9 @@
 import re
 
-# Mandatory declarations under Legal Metrology (Packaged Commodities) Rules 2011 & FSSAI
+# Mandatory declarations under Legal Metrology (Packaged Commodities) Rules 2011 (as amended) & FSS (Labelling and Display) Regulations 2020.
+# Citations verified against the consolidated rule text:
+#   6(1)(a) manufacturer; 6(1)(aa) country of origin (imports, 2017 Amdt); 6(1)(c) net quantity;
+#   6(1)(d) month & year of manufacture; 6(1)(da) best before/use by (2017 Amdt); 6(1)(e) MRP; 6(2) consumer care.
 MANDATORY_FIELDS = {
     "net_quantity": {
         "label": "Net Quantity",
@@ -8,7 +11,7 @@ MANDATORY_FIELDS = {
             r"(?:net\s*(?:quantity|qty|wt\.?|weight)?|weight|qty)\s*[:\-]?\s*([\d.,]+)\s*(g|gm|gms|kg|ml|l|ltr|litre|oz|lb)\b",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(a) — Net quantity mandatory in standard metric units"
+        "rule": "LM Rule §6(1)(c) — Net quantity mandatory in standard metric units"
     },
     "mrp": {
         "label": "Maximum Retail Price (MRP)",
@@ -17,7 +20,7 @@ MANDATORY_FIELDS = {
             r".*?(?:rs\.?|₹|inr)\s*([\d,]+\.?\d*)|(?:rs\.?|₹)\s*([\d,]+\.?\d*)",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(f) — MRP inclusive of all taxes"
+        "rule": "LM Rule §6(1)(e) — MRP inclusive of all taxes"
     },
     "manufacturer": {
         "label": "Manufacturer / Packer Name & Address",
@@ -25,7 +28,7 @@ MANDATORY_FIELDS = {
             r"(?:manufactured(?:\s*&\s*marketed)?|marketed|packed|mfg|mfd)\s+by\s+(.+?)(?:\n|lic|fssai|$)",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(b) — Name and address of manufacturer/packer/importer"
+        "rule": "LM Rule §6(1)(a) — Name and address of manufacturer/packer/importer"
     },
     "manufacture_date": {
         "label": "Month & Year of Manufacture",
@@ -43,7 +46,7 @@ MANDATORY_FIELDS = {
             r"([a-z0-9]{3,}[\s\/\-]\d{4}|\d{1,2}[\/-]\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\w+\/\d{4}|\d+\s+months)",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(e) — Expiry or Best Before date"
+        "rule": "LM Rule §6(1)(da) — Best before / use by date"
     },
     "consumer_care": {
         "label": "Consumer Care Details",
@@ -52,7 +55,7 @@ MANDATORY_FIELDS = {
             r".{0,40}?(?:\+?91[\s\-]?\d[\d\s\-]{8,}|\d{10,}|\w+@[\w\.\-]+)",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(g) — Consumer care phone/email mandatory"
+        "rule": "LM Rule §6(2) — Consumer care phone/email mandatory"
     },
     "fssai": {
         "label": "FSSAI License Number",
@@ -60,7 +63,7 @@ MANDATORY_FIELDS = {
             r"(?:fssai|fsat|fssal|issai|lic(?:ense)?\.?\s*(?:no\.?)?|lic\s*#)[\s\S]{0,25}?[:\-]?\s*([0-9\s]{10,18})|\b([0-9]{14})\b",
             re.IGNORECASE
         ),
-        "rule": "FSSAI Licensing and Registration Regulations 2011 §2.1"
+        "rule": "FSS (Labelling and Display) Regulations 2020 §2.1.1"
     },
     "country_of_origin": {
         "label": "Country of Origin",
@@ -68,7 +71,7 @@ MANDATORY_FIELDS = {
             r"(?:country\s+of\s+origin|product\s+of|made\s+in|manufactured\s+in)\s*[:\-]?\s*([a-z]+)|(?:,\s*|\b)(india|bharat)\b",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(c) — Country of origin declaration"
+        "rule": "LM Rule §6(1)(aa) — Country of origin declaration"
     },
 }
 

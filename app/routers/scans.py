@@ -44,14 +44,12 @@ def _format_scan_record(r: ScanRecordDB) -> Dict[str, Any]:
 
     image_uri = f"/uploads/{os.path.basename(r.image_path)}" if r.image_path else ""
 
-    # Ensure authenticity score is integer 0-100 for frontend
-    auth_score = r.authenticity_score
-    if auth_score is not None and auth_score <= 1.0:
-        auth_score = int(auth_score * 100)
-    elif auth_score is None:
-        auth_score = 85
-    else:
-        auth_score = int(auth_score)
+    # Compliance confidence: stored compliance-derived score, 0-100. None stays None — no fake default.
+    conf_score = r.authenticity_score
+    if conf_score is not None and conf_score <= 1.0:
+        conf_score = int(conf_score * 100)
+    elif conf_score is not None:
+        conf_score = int(conf_score)
 
     return {
         "id": r.id,
@@ -61,7 +59,7 @@ def _format_scan_record(r: ScanRecordDB) -> Dict[str, Any]:
         "scannedAt": scanned_at_iso,
         "date": scanned_at_date,
         "status": r.status,
-        "authenticityScore": auth_score,
+        "complianceConfidence": conf_score,
         "thumbnailColor": r.thumbnail_color or "#607D8B",
         "imageUri": image_uri,
         "imageUrl": image_uri,
@@ -147,7 +145,7 @@ async def analyze_package_image(
             gtin=gtin,
             net_weight=scan_record["netWeight"],
             status=scan_record["status"],
-            authenticity_score=scan_record["authenticityScore"],
+            authenticity_score=scan_record["complianceConfidence"],
             thumbnail_color=scan_record["thumbnailColor"],
             image_path=dst if os.path.exists(dst) else file_path,
             processing_time=scan_record.get("processingTime"),
@@ -159,7 +157,7 @@ async def analyze_package_image(
         db.add(db_row)
         db.commit()
 
-        logger.info(f"[/api/analyze] {scan_id} -> {scan_record['status']} (score={scan_record['authenticityScore']})")
+        logger.info(f"[/api/analyze] {scan_id} -> {scan_record['status']} (conf={scan_record['complianceConfidence']})")
         return scan_record
 
     except Exception as e:
@@ -258,7 +256,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
             "violationsByField": {},
             "recentScans": [],
             "violationRate": 0.0,
-            "authenticityFlags": 0,
+            "lowConfidenceFlags": 0,
             "avgSecondsPerScan": 0.0,
             "compliantCount": 0,
             "nonCompliantCount": 0,
@@ -300,6 +298,21 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
 
     recent = [_format_scan_record(r) for r in sorted(all_records, key=lambda x: x.scanned_at, reverse=True)[:5]]
 
+    # Real category breakdown, derived from the product master catalog via scanned GTINs.
+    # Scans without a known GTIN/category are reported as Uncategorized — no fabricated splits.
+    gtins = [r.gtin for r in all_records if r.gtin]
+    gtin_category: Dict[str, Optional[str]] = {}
+    if gtins:
+        for pm in db.query(ProductMasterDB).filter(ProductMasterDB.gtin.in_(gtins)).all():
+            gtin_category[pm.gtin] = pm.category
+    cat_counts: Counter = Counter()
+    cat_violations: Counter = Counter()
+    for r in all_records:
+        category = (gtin_category.get(r.gtin) if r.gtin else None) or "Uncategorized"
+        cat_counts[category] += 1
+        if r.status in ("warning", "fail", "needs_review"):
+            cat_violations[category] += 1
+
     return {
         "totalScans": total,
         "statusCounts": {
@@ -312,7 +325,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         "violationsByField": dict(field_fails.most_common(10)),
         "recentScans": recent,
         "violationRate": round(non_c / total * 100, 1),
-        "authenticityFlags": flags,
+        "lowConfidenceFlags": flags,
         "avgSecondsPerScan": avg_t,
         "compliantCount": pass_c,
         "nonCompliantCount": non_c,
@@ -325,13 +338,13 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         ],
         "dailyCounts": sorted(daily.values(), key=lambda x: x["day"])[-7:],
         "categoryBreakdown": [
-            {"category": "Food & Beverages", "count": int(total * 0.55), "violationRate": 18.5},
-            {"category": "Personal Care", "count": int(total * 0.25), "violationRate": 12.0},
-            {"category": "Household Goods", "count": int(total * 0.20), "violationRate": 8.0},
+            {
+                "category": cat,
+                "count": n,
+                "violationRate": round(cat_violations[cat] / n * 100, 1) if n else 0.0,
+            }
+            for cat, n in cat_counts.most_common()
         ],
-        "zoneBreakdown": [
-            {"zone": "North Zone", "scans": int(total * 0.4), "violations": int(non_c * 0.4)},
-            {"zone": "South Zone", "scans": int(total * 0.3), "violations": int(non_c * 0.3)},
-            {"zone": "West Zone", "scans": int(total * 0.3), "violations": int(non_c * 0.3)},
-        ],
+        # Zone analytics remain empty until officers are actually assigned zones in their profiles.
+        "zoneBreakdown": [],
     }

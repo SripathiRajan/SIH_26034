@@ -6,7 +6,6 @@ mobile frontend are resolved. Nothing in the pipeline itself changes.
 """
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
-from core.config import AUTHENTICITY_PASS_MIN, AUTHENTICITY_WARN_MIN
 
 STATUS_MAP = {
     "COMPLIANT":       "pass",
@@ -39,13 +38,9 @@ def _field_status(field_data: Dict) -> str:
     return "warning" if field_data.get("location") == "SEE_FLAP" else "fail"
 
 
-def _authenticity_score(compliance_score: float, status: str) -> int:
-    base = int(compliance_score)
-    if status == "pass":
-        return max(base, AUTHENTICITY_PASS_MIN)
-    elif status == "warning":
-        return max(min(base, AUTHENTICITY_PASS_MIN - 1), AUTHENTICITY_WARN_MIN)
-    return min(base, AUTHENTICITY_WARN_MIN - 1)
+def _compliance_confidence(compliance_score: float) -> int:
+    """The honest 0-100 confidence that declarations were found — no clamping games."""
+    return int(round(compliance_score))
 
 
 def _engines_used(fields: Dict) -> List[str]:
@@ -73,8 +68,6 @@ def _product_info(fields: Dict, gtin_data: Optional[Dict]) -> Dict[str, str]:
         if cleaned:
             brand        = cleaned[:50].strip()
             product_name = cleaned[:100].strip()
-            if "weikfield" in cleaned.lower():
-                brand = "Weikfield"
 
     qty = fields.get("net_quantity", {})
     if qty.get("found"):
@@ -126,7 +119,7 @@ def pipeline_report_to_scan_record(
     status           = _map_status(pipeline_status)
     fields_dict      = pipeline_report.get("fields", {})
     compliance_score = float(pipeline_report.get("compliance_score", 0.0))
-    auth_score       = _authenticity_score(compliance_score, status)
+    compliance_conf  = _compliance_confidence(compliance_score)
     product_info     = _product_info(fields_dict, gtin_data)
     field_checks     = _build_field_checks(fields_dict)
     field_checks     = enrich_field_checks(field_checks)   # add statutory citations
@@ -139,7 +132,7 @@ def pipeline_report_to_scan_record(
         "netWeight":         product_info["netWeight"],
         "scannedAt":         datetime.now(IST).isoformat(),
         "status":            status,
-        "authenticityScore": auth_score,
+        "complianceConfidence": compliance_conf,
         "thumbnailColor":    COLOR_MAP.get(status, "#607D8B"),
         "imageUri":          image_uri,
         "processingTime":    pipeline_report.get("elapsed_seconds"),
