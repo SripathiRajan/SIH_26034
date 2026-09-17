@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Platform, Modal, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Svg, { Path, Rect, Circle, Line } from 'react-native-svg';
+import DemoBanner from '../components/DemoBanner';
 
 interface Props {
   navigation: any;
@@ -419,6 +420,7 @@ export default function HomeScreen({ navigation }: Props) {
 
   return (
     <View style={styles.bodyWrap}>
+      <DemoBanner />
       {/* Hidden file input for web */}
       {Platform.OS === 'web' && (
         <input

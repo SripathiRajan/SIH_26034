@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,16 @@ import {
   Platform,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import Svg, { Path, Circle, Line, Rect, Polygon } from 'react-native-svg';
 import GlassCard from '../components/GlassCard';
 import StatusPill from '../components/StatusPill';
+import DemoBanner from '../components/DemoBanner';
 import { color, font, space, radius } from '../theme/tokens';
 import { recentScans } from '../data/mockData';
+import { DEMO_MODE } from '../api/config';
+import { api } from '../api/client';
 import { exportReportAsPdf } from '../services/reportExporter';
 
 import DottedBackground from '../components/DottedBackground';
@@ -86,7 +90,60 @@ export default function ResultScreen({ navigation, route }: Props) {
   const scanData = route.params?.scanData;
   const scanId = route.params?.scanId;
 
-  const scan = scanData || recentScans.find((s) => s.id === scanId) || recentScans[0];
+  const [scan, setScan] = useState<any>(
+    scanData || (DEMO_MODE ? (recentScans.find((s) => s.id === scanId) || recentScans[0]) : null)
+  );
+  const [loading, setLoading] = useState(!scanData && !!scanId && !DEMO_MODE);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!scan && scanId) {
+      setLoading(true);
+      api.getScan(scanId)
+        .then((data) => {
+          setScan(data);
+          setLoading(false);
+        })
+        .catch((err) => {
+          setError(err.message || 'Failed to load inspection record');
+          setLoading(false);
+        });
+    }
+  }, [scanId]);
+
+  if (loading) {
+    return (
+      <DottedBackground>
+        <DemoBanner />
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+          <ActivityIndicator size="large" color={color.primary} />
+          <Text style={[styles.headerSubtitle, { marginTop: 16 }]}>Loading inspection report...</Text>
+        </View>
+      </DottedBackground>
+    );
+  }
+
+  if (!scan) {
+    return (
+      <DottedBackground>
+        <DemoBanner />
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+          <Text style={[styles.headerTitle, { color: color.danger, textAlign: 'center' }]}>
+            {error || 'No inspection data available'}
+          </Text>
+          <Text style={[styles.headerSubtitle, { marginTop: 8, marginBottom: 20, textAlign: 'center' }]}>
+            Please scan a packaged commodity to inspect compliance declarations.
+          </Text>
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: color.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 }]}
+            onPress={() => navigation.navigate('Capture')}
+          >
+            <Text style={[styles.backBtnText, { color: '#FFFFFF' }]}>Start New Inspection</Text>
+          </TouchableOpacity>
+        </View>
+      </DottedBackground>
+    );
+  }
 
   const violationCount = scan.fields?.filter((f: any) => f.status === 'fail').length ?? 0;
   const warningCount = scan.fields?.filter((f: any) => f.status === 'warning').length ?? 0;
@@ -116,6 +173,7 @@ export default function ResultScreen({ navigation, route }: Props) {
 
   return (
     <DottedBackground>
+      <DemoBanner />
       <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
       {/* Header Bar */}
       <View style={styles.navHeader}>
@@ -184,28 +242,28 @@ export default function ResultScreen({ navigation, route }: Props) {
           </View>
         </GlassCard>
 
-        {/* Authenticity Score */}
+        {/* Compliance Confidence */}
         <GlassCard style={styles.authCard}>
           <View style={styles.authCardHeader}>
-            <ShieldIcon col={scan.authenticityScore >= 90 ? color.success : scan.authenticityScore >= 75 ? color.warning : color.danger} size={16} />
-            <Text style={styles.authCardTitle}>Authenticity Score</Text>
+            <ShieldIcon col={scan.complianceConfidence >= 90 ? color.success : scan.complianceConfidence >= 75 ? color.warning : color.danger} size={16} />
+            <Text style={styles.authCardTitle}>Compliance Confidence</Text>
           </View>
           <Text style={[styles.authScore, {
-            color: scan.authenticityScore >= 90 ? color.success : scan.authenticityScore >= 75 ? color.warning : color.danger,
+            color: scan.complianceConfidence >= 90 ? color.success : scan.complianceConfidence >= 75 ? color.warning : color.danger,
           }]}>
-            {scan.authenticityScore}%
+            {scan.complianceConfidence}%
           </Text>
-          <Text style={styles.authSub}>DINOv2 Visual Embedding Analysis</Text>
+          <Text style={styles.authSub}>Ensemble OCR & Extraction Confidence</Text>
           <View style={styles.authBar}>
             <View style={[styles.authBarFill, {
-              width: `${scan.authenticityScore}%`,
-              backgroundColor: scan.authenticityScore >= 90 ? color.success : scan.authenticityScore >= 75 ? color.warning : color.danger,
+              width: `${scan.complianceConfidence}%`,
+              backgroundColor: scan.complianceConfidence >= 90 ? color.success : scan.complianceConfidence >= 75 ? color.warning : color.danger,
             }]} />
           </View>
           <Text style={styles.authBarLabel}>
-            {scan.authenticityScore >= 90 ? 'High Confidence — Genuine Product' :
-              scan.authenticityScore >= 75 ? 'Moderate Confidence — Manual Review' :
-              'Low Confidence — Possible Clone Risk'}
+            {scan.complianceConfidence >= 90 ? 'High Confidence — Robust Detection' :
+              scan.complianceConfidence >= 75 ? 'Moderate Confidence — Manual Review Recommended' :
+              'Low Confidence — Verification Required'}
           </Text>
         </GlassCard>
       </View>

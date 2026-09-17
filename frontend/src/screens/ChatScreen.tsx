@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
+import DemoBanner from '../components/DemoBanner';
 
 interface Message {
   id: string;
@@ -213,6 +214,7 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.pageWrap}>
+      <DemoBanner />
       <View style={[styles.cardContainer, isMobile && styles.cardContainerMobile]}>
         {/* Header Card */}
         <View style={styles.headerCard}>

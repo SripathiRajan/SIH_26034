@@ -1,27 +1,35 @@
 import threading
-import torch
-import torch.nn as nn
-from transformers import PretrainedConfig, RobertaTokenizer, AutoProcessor, AutoModelForCausalLM
 from core.config import CACHE_DIR, EASYOCR_CACHE, VLM_MODEL_ID, USE_GPU
 from core.logger import logger
 
-# Monkeypatches for Florence-2 dynamic architecture compatibility
-orig_c = PretrainedConfig.__getattribute__
-PretrainedConfig.__getattribute__ = lambda self, name: (
-    None if name == 'forced_bos_token_id' and name not in self.__dict__
-    else orig_c(self, name)
-)
+try:
+    import torch
+    import torch.nn as nn
+    from transformers import PretrainedConfig, RobertaTokenizer, AutoProcessor, AutoModelForCausalLM
 
-orig_m = nn.Module.__getattr__
-nn.Module.__getattr__ = lambda self, name: (
-    True if name == '_supports_sdpa' and name not in self.__dict__
-    else orig_m(self, name)
-)
-
-if not hasattr(RobertaTokenizer, "additional_special_tokens"):
-    RobertaTokenizer.additional_special_tokens = property(
-        lambda self: getattr(self, '_additional_special_tokens', [])
+    # Monkeypatches for Florence-2 dynamic architecture compatibility
+    orig_c = PretrainedConfig.__getattribute__
+    PretrainedConfig.__getattribute__ = lambda self, name: (
+        None if name == 'forced_bos_token_id' and name not in self.__dict__
+        else orig_c(self, name)
     )
+
+    orig_m = nn.Module.__getattr__
+    nn.Module.__getattr__ = lambda self, name: (
+        True if name == '_supports_sdpa' and name not in self.__dict__
+        else orig_m(self, name)
+    )
+
+    if not hasattr(RobertaTokenizer, "additional_special_tokens"):
+        RobertaTokenizer.additional_special_tokens = property(
+            lambda self: getattr(self, '_additional_special_tokens', [])
+        )
+    HAS_TORCH = True
+except Exception as e:
+    torch = None
+    nn = None
+    HAS_TORCH = False
+    logger.warning(f"PyTorch / Transformers not available: {e}")
 
 class ModelRegistry:
     """

@@ -3,6 +3,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWindowDimensions, Platform } from 'react-native';
 import Svg, { Path, Circle, Line } from 'react-native-svg';
 import StatusPill from '../components/StatusPill';
+import DemoBanner from '../components/DemoBanner';
+import { DEMO_MODE } from '../api/config';
 import { recentScans } from '../data/mockData';
 
 interface Props {
@@ -68,10 +70,10 @@ const SORT_OPTIONS = [
 
 function exportCsv(scans: typeof recentScans) {
   if (Platform.OS !== 'web') return;
-  const header = ['Audit ID', 'Product Name', 'Brand', 'Category', 'Net Quantity', 'Status', 'Authenticity Score', 'Scanned At'];
+  const header = ['Audit ID', 'Product Name', 'Brand', 'Category', 'Net Quantity', 'Status', 'Compliance Confidence', 'Scanned At'];
   const rows = scans.map((s) => [
     s.id, s.productName, s.brand, s.category || 'General',
-    s.netWeight, s.status, s.authenticityScore,
+    s.netWeight, s.status, s.complianceConfidence,
     s.scannedAt ? new Date(s.scannedAt).toLocaleString('en-IN') : ''
   ]);
   const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -85,7 +87,7 @@ function exportCsv(scans: typeof recentScans) {
 }
 
 export default function HistoryScreen({ navigation }: Props) {
-  const [liveScans, setLiveScans] = useState<any[]>(recentScans);
+  const [liveScans, setLiveScans] = useState<any[]>(DEMO_MODE ? recentScans : []);
 
   useEffect(() => {
     api.listScans().then((data) => {
@@ -158,8 +160,10 @@ export default function HistoryScreen({ navigation }: Props) {
   }, [filter, searchQuery, dateFilter, sortBy]);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
-      {/* Header Panel */}
+    <View style={{ flex: 1 }}>
+      <DemoBanner />
+      <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
+        {/* Header Panel */}
       <View style={[styles.headerBanner, isMobile && styles.mobileHeaderBanner]}>
         <View style={{ flex: 1 }}>
           <View style={styles.eyebrowBadge}>
@@ -321,6 +325,7 @@ export default function HistoryScreen({ navigation }: Props) {
         )}
       </View>
     </ScrollView>
+    </View>
   );
 }
 

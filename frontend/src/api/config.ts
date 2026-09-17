@@ -26,3 +26,5 @@ export const API_CONFIG = {
     CHAT: '/api/chat',
   },
 };
+
+export const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO === '1';

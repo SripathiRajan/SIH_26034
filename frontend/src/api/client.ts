@@ -6,11 +6,20 @@
  * local simulated data so development and UI testing never fail.
  */
 import { Platform } from 'react-native';
-import { API_CONFIG } from './config';
+import { API_CONFIG, DEMO_MODE } from './config';
 import { recentScans, dashboardStats } from '../data/mockData';
 import { rulesDatabase } from '../data/rulesDatabase';
 import { simulateScanPipeline } from '../services/scanSimulator';
 import { ScanRecord, DashboardStats, Rule, OfficerUser } from '../types';
+
+export class ApiError extends Error {
+  public code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+  }
+}
 
 class ApiClient {
   private baseUrl: string = API_CONFIG.BASE_URL;
@@ -136,13 +145,23 @@ class ApiClient {
       } else {
         const errorText = await response.text().catch(() => '');
         console.warn(`[ApiClient] Scan API error HTTP ${response.status}: ${errorText}`);
+        if (!DEMO_MODE) {
+          throw new ApiError('SCAN_FAILED', `Scan failed (HTTP ${response.status}): ${errorText || 'Server error'}`);
+        }
       }
-    } catch (err) {
-      // Graceful fallback to local pipeline simulation
-      console.warn('[ApiClient] Real backend scan call failed, falling back to simulator:', err);
+    } catch (err: any) {
+      if (err instanceof ApiError) throw err;
+      if (DEMO_MODE) {
+        console.warn('[ApiClient] Backend scan call failed, falling back to simulator (demo mode):', err);
+        return simulateScanPipeline(imageUri, onProgress);
+      }
+      throw new ApiError('BACKEND_UNREACHABLE', 'Cannot scan — backend is offline or unreachable');
     }
 
-    return simulateScanPipeline(imageUri, onProgress);
+    if (DEMO_MODE) {
+      return simulateScanPipeline(imageUri, onProgress);
+    }
+    throw new ApiError('SCAN_FAILED', 'Scan processing failed');
   }
 
   /**
@@ -175,17 +194,21 @@ class ApiClient {
         }
       }
     } catch (err) {
-      console.warn('[ApiClient] listScans failed, using local cache:', err);
+      console.warn('[ApiClient] listScans failed:', err);
     }
 
-    let result = [...recentScans];
-    if (params?.status && params.status !== 'all') {
-      result = result.filter((s: ScanRecord) => s.status.toLowerCase() === params.status?.toLowerCase());
+    if (DEMO_MODE) {
+      let result = [...recentScans];
+      if (params?.status && params.status !== 'all') {
+        result = result.filter((s: ScanRecord) => s.status.toLowerCase() === params.status?.toLowerCase());
+      }
+      if (params?.brand) {
+        result = result.filter((s: ScanRecord) => s.brand.toLowerCase().includes(params.brand?.toLowerCase() || ''));
+      }
+      return result;
     }
-    if (params?.brand) {
-      result = result.filter((s: ScanRecord) => s.brand.toLowerCase().includes(params.brand?.toLowerCase() || ''));
-    }
-    return result;
+
+    return [];
   }
 
   /**
@@ -205,11 +228,16 @@ class ApiClient {
         const data = await res.json();
         return this.normalizeScanRecord(data, data.imageUri || '');
       }
-    } catch {
-      // Local fallback
+    } catch (err) {
+      console.warn('[ApiClient] getScan failed:', err);
     }
 
-    return recentScans.find((s: ScanRecord) => s.id === id) || recentScans[0];
+    if (DEMO_MODE) {
+      const found = recentScans.find((s: ScanRecord) => s.id === id) || recentScans[0];
+      if (found) return found;
+    }
+
+    throw new ApiError('NOT_FOUND', `Scan record ${id} not found or backend unreachable`);
   }
 
   /**
@@ -228,11 +256,15 @@ class ApiClient {
       if (res.ok) {
         return await res.json();
       }
-    } catch {
-      // Local fallback
+    } catch (err) {
+      console.warn('[ApiClient] getDashboardStats failed:', err);
     }
 
-    return dashboardStats;
+    if (DEMO_MODE) {
+      return dashboardStats;
+    }
+
+    throw new ApiError('BACKEND_UNREACHABLE', 'Cannot fetch dashboard statistics — backend is offline');
   }
 
   /**
@@ -339,17 +371,22 @@ class ApiClient {
       const err = await res.json().catch(() => ({ detail: 'Login failed' }));
       return { success: false, error: err.detail || 'Invalid credentials' };
     } catch {
-      // Fallback officer for demo
+      if (DEMO_MODE) {
+        return {
+          success: true,
+          user: {
+            id: 'officer-demo',
+            name: 'Insp. R. Sharma',
+            role: 'officer',
+            department: 'Legal Metrology Dept, Delhi',
+            zone: 'North Zone',
+            badgeId: 'LM-DL-8821',
+          },
+        };
+      }
       return {
-        success: true,
-        user: {
-          id: 'officer-demo',
-          name: 'Insp. R. Sharma',
-          role: 'officer',
-          department: 'Legal Metrology Dept, Delhi',
-          zone: 'North Zone',
-          badgeId: 'LM-DL-8821',
-        },
+        success: false,
+        error: 'Backend unreachable — cannot authenticate in production mode',
       };
     }
   }
@@ -362,10 +399,10 @@ class ApiClient {
   }
 
   private normalizeScanRecord(data: any, fallbackUri: string): ScanRecord {
-    const rawAuth = data.authenticityScore ?? data.authenticity_score;
-    let authScore = 85;
-    if (typeof rawAuth === 'number') {
-      authScore = rawAuth <= 1.0 ? Math.round(rawAuth * 100) : Math.round(rawAuth);
+    const rawConf = data.complianceConfidence ?? data.compliance_confidence ?? data.authenticityScore ?? data.authenticity_score;
+    let confidence = 0;
+    if (typeof rawConf === 'number') {
+      confidence = rawConf <= 1.0 ? Math.round(rawConf * 100) : Math.round(rawConf);
     }
 
     return {
@@ -376,11 +413,11 @@ class ApiClient {
       scannedAt: data.scannedAt || data.scanned_at || new Date().toISOString(),
       date: data.date || new Date().toLocaleDateString('en-GB'),
       status: data.status || 'warning',
-      authenticityScore: authScore,
+      complianceConfidence: confidence,
       thumbnailColor: data.thumbnailColor || '#00C2A8',
       imageUri: data.imageUri || (data.imageUrl ? `${this.baseUrl}${data.imageUrl}` : fallbackUri),
-      processingTime: data.processingTime || 1.8,
-      ocrEnginesUsed: data.ocrEnginesUsed || ['PaddleOCR-v4', 'EasyOCR', 'SuryaOCR'],
+      processingTime: data.processingTime ?? data.processing_time,
+      ocrEnginesUsed: data.ocrEnginesUsed ?? data.ocr_engines_used,
       fields: Array.isArray(data.fields) ? data.fields : [],
       inspectorNotes: Array.isArray(data.inspectorNotes) ? data.inspectorNotes : [],
     };

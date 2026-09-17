@@ -40,7 +40,7 @@ export interface ScanRecord {
   scannedAt: string; // ISO timestamp
   date?: string;     // human-readable date alias used in ResultScreen
   status: ComplianceStatus;
-  authenticityScore: number; // 0-100
+  complianceConfidence: number; // 0-100 (formerly authenticityScore)
   thumbnailColor: string;
   imageUri?: string;
   processingTime?: number; // seconds

@@ -2,6 +2,7 @@ import { api } from '../api/client';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWindowDimensions, Platform } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
+import DemoBanner from '../components/DemoBanner';
 import { rulesDatabase } from '../data/rulesDatabase';
 
 type RuleCategory = 'all' | 'mandatory' | 'font-size' | 'mrp' | 'consumer-care' | 'penalty' | 'packaging';
@@ -66,8 +67,10 @@ export default function RulesScreen() {
   const activeCat = CATEGORY_FILTERS.find((c) => c.key === activeCategory)!;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
-      {/* Header Banner */}
+    <View style={{ flex: 1 }}>
+      <DemoBanner />
+      <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
+        {/* Header Banner */}
       <View style={[styles.headerBanner, isMobile && styles.mobileHeaderBanner]}>
         <View style={{ flex: 1 }}>
           <View style={styles.eyebrowBadge}>
@@ -210,6 +213,7 @@ export default function RulesScreen() {
         </Text>
       </View>
     </ScrollView>
+    </View>
   );
 }
 

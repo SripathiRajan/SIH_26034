@@ -13,6 +13,7 @@ import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import DottedBackground from '../components/DottedBackground';
 import LogoHeader from '../components/LogoHeader';
 import RoleTabs from '../components/RoleTabs';
+import DemoBanner from '../components/DemoBanner';
 import CustomInput from '../components/CustomInput';
 import PrimaryButton from '../components/PrimaryButton';
 import { pramanColor, pramanFont, radius, shadow } from '../theme/tokens';
@@ -108,6 +109,7 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
 
   return (
     <DottedBackground>
+      <DemoBanner />
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

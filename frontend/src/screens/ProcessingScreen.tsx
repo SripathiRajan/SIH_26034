@@ -1,7 +1,9 @@
 import { api } from '../api/client';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Platform, useWindowDimensions, TouchableOpacity } from 'react-native';
 import GlassCard from '../components/GlassCard';
+import DemoBanner from '../components/DemoBanner';
+import { DEMO_MODE } from '../api/config';
 import { color, font, space, radius } from '../theme/tokens';
 import { OCR_PIPELINE_STAGES, simulateScanPipeline } from '../services/scanSimulator';
 
@@ -18,6 +20,7 @@ export default function ProcessingScreen({ navigation, route }: Props) {
   const isMobile = width < 768;
   const [currentStageIndex, setCurrentStageIndex] = useState(0);
   const [extractedLogs, setExtractedLogs] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const imageUri = route.params?.imageUri;
 
   useEffect(() => {
@@ -36,22 +39,28 @@ export default function ProcessingScreen({ navigation, route }: Props) {
           navigation.replace('Result', { scanData: resultScan });
         }, 600);
       }
-    }).catch(() => {
-      simulateScanPipeline(
-      imageUri || '',
-      (stageIdx) => {
-        if (isMounted) setCurrentStageIndex(stageIdx);
-      },
-      (snippet) => {
-        if (isMounted) setExtractedLogs((prev) => [...prev, snippet]);
+    }).catch((err: any) => {
+      if (DEMO_MODE) {
+        simulateScanPipeline(
+          imageUri || '',
+          (stageIdx) => {
+            if (isMounted) setCurrentStageIndex(stageIdx);
+          },
+          (snippet) => {
+            if (isMounted) setExtractedLogs((prev) => [...prev, snippet]);
+          }
+        ).then((resultScan) => {
+          if (isMounted) {
+            setTimeout(() => {
+              navigation.replace('Result', { scanData: resultScan });
+            }, 500);
+          }
+        });
+      } else {
+        if (isMounted) {
+          setError(err?.message || 'Processing failed. Backend may be offline or unreachable.');
+        }
       }
-    ).then((resultScan) => {
-      if (isMounted) {
-        setTimeout(() => {
-          navigation.replace('Result', { scanData: resultScan });
-        }, 500);
-      }
-    });
     });
 
     return () => {
@@ -61,18 +70,44 @@ export default function ProcessingScreen({ navigation, route }: Props) {
 
   return (
     <DottedBackground>
+      <DemoBanner />
       <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.liveBadge}>
-          <View style={styles.liveDot} />
-          <Text style={styles.liveBadgeText}>VERIFYING DECLARATIONS</Text>
+          <View style={[styles.liveDot, error ? { backgroundColor: color.danger } : {}]} />
+          <Text style={[styles.liveBadgeText, error ? { color: color.danger } : {}]}>
+            {error ? 'PROCESSING FAILED' : 'VERIFYING DECLARATIONS'}
+          </Text>
         </View>
-        <Text style={[styles.headerTitle, isMobile && { fontSize: 20 }]}>Processing Packaging Label...</Text>
+        <Text style={[styles.headerTitle, isMobile && { fontSize: 20 }]}>
+          {error ? 'Inspection Error' : 'Processing Packaging Label...'}
+        </Text>
         <Text style={styles.headerSubtitle}>
-          Reading label text and checking mandatory declarations against Legal Metrology Rules, 2011.
+          {error
+            ? 'An error occurred while communicating with the inspection backend.'
+            : 'Reading label text and checking mandatory declarations against Legal Metrology Rules, 2011.'}
         </Text>
       </View>
+
+      {error && (
+        <GlassCard style={[styles.terminalCard, { borderColor: color.danger, padding: 20, marginBottom: 20 }]}>
+          <Text style={[styles.terminalTitle, { color: color.danger, marginBottom: 8 }]}>Error Details</Text>
+          <Text style={{ color: '#E2E8F0', fontSize: 13, marginBottom: 16 }}>{error}</Text>
+          <TouchableOpacity
+            style={{
+              backgroundColor: color.primary,
+              paddingVertical: 10,
+              paddingHorizontal: 18,
+              borderRadius: 8,
+              alignSelf: 'flex-start',
+            }}
+            onPress={() => navigation.navigate('Capture')}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Return to Scanner</Text>
+          </TouchableOpacity>
+        </GlassCard>
+      )}
 
       {/* Verification Log Stream */}
       <GlassCard style={styles.terminalCard}>

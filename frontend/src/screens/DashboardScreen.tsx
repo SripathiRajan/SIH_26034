@@ -2,6 +2,8 @@ import { api } from '../api/client';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, useWindowDimensions, TouchableOpacity, Platform } from 'react-native';
 import Svg, { Path, Rect, Line, Circle } from 'react-native-svg';
+import DemoBanner from '../components/DemoBanner';
+import { DEMO_MODE } from '../api/config';
 import { dashboardStats } from '../data/mockData';
 
 /* SVG Vector Icons */
@@ -151,12 +153,26 @@ function DonutChart({ compliant = 83, review = 11, nonCompliant = 6 }: { complia
   );
 }
 
+const EMPTY_DASHBOARD_STATS: any = {
+  totalScans: 0,
+  violationRate: 0,
+  authenticityFlags: 0,
+  avgSecondsPerScan: 0,
+  compliantCount: 0,
+  nonCompliantCount: 0,
+  topViolationFields: [],
+  topFlaggedBrands: [],
+  dailyCounts: [],
+  categoryBreakdown: [],
+  zoneBreakdown: [],
+};
+
 const CATEGORY_COLORS = ['#6C5CE7', '#17B897', '#F5A623', '#F0544B', '#5B468D', '#1F2748'];
 
 export default function DashboardScreen() {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
-  const [stats, setStats] = useState<any>(dashboardStats);
+  const [stats, setStats] = useState<any>(DEMO_MODE ? dashboardStats : EMPTY_DASHBOARD_STATS);
 
   useEffect(() => {
     api.getDashboardStats().then((data) => {
@@ -165,8 +181,8 @@ export default function DashboardScreen() {
   }, []);
   const [activeTab, setActiveTab] = useState<'weekly' | 'category' | 'zone'>('weekly');
 
-  const maxDailyTotal = Math.max(...stats.dailyCounts.map((d) => d.pass + d.warning + d.fail));
-  const maxCategoryCount = Math.max(...(stats.categoryBreakdown || []).map((c) => c.count));
+  const maxDailyTotal = Math.max(1, ...(stats.dailyCounts || []).map((d: any) => (d.pass || 0) + (d.warning || 0) + (d.fail || 0)));
+  const maxCategoryCount = Math.max(1, ...(stats.categoryBreakdown || []).map((c: any) => c.count || 0));
 
   // Inject Web CSS & Plus Jakarta Sans Font
   useEffect(() => {
@@ -182,8 +198,10 @@ export default function DashboardScreen() {
   }, []);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
-      {/* 1. TOP BAR */}
+    <View style={{ flex: 1 }}>
+      <DemoBanner />
+      <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
+        {/* 1. TOP BAR */}
       <View style={styles.topBar}>
         <View style={styles.topBarLeft}>
           <View style={styles.liveDot} />
@@ -551,6 +569,7 @@ export default function DashboardScreen() {
         </View>
       </View>
     </ScrollView>
+    </View>
   );
 }
 

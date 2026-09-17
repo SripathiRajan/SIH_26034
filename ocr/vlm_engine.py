@@ -1,6 +1,9 @@
 from typing import List, Dict, Any
 from PIL import Image
-import torch
+try:
+    import torch
+except Exception:
+    torch = None
 from core.models import registry
 from core.config import VLM_TARGET_DIM
 from core.logger import logger

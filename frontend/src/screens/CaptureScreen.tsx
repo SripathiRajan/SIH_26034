@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Modal, 
 import * as ImagePicker from 'expo-image-picker';
 import Svg, { Path, Rect, Circle, Line } from 'react-native-svg';
 import GlassCard from '../components/GlassCard';
+import DemoBanner from '../components/DemoBanner';
+import { DEMO_MODE } from '../api/config';
 import { color, font, space, radius } from '../theme/tokens';
 
 interface Props {
@@ -143,68 +145,73 @@ export default function CaptureScreen({ navigation }: Props) {
   };
 
   const handleDemoScan = () => {
+    if (!DEMO_MODE) return;
     navigation.navigate('Processing', { imageUri: '' });
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
-      {/* Navigation Bar */}
-      <View style={styles.navHeader}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>← Back</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, isMobile && { fontSize: 20 }]}>Select Package Label Image</Text>
-        <Text style={styles.headerSubtitle}>
-          Upload file, capture live photo, or scan entire 360° product video to verify mandatory Legal Metrology declarations.
-        </Text>
-      </View>
-
-      {/* Upload Drop Zone Card */}
-      <GlassCard style={styles.dropZoneCard}>
-        <View style={styles.dropZoneInner}>
-          <View style={styles.iconCircle}>
-            <Text style={styles.iconCircleText}>SCAN</Text>
-          </View>
-
-          <Text style={styles.dropTitle}>Select Packaging Image for Inspection</Text>
-          <Text style={styles.dropSubtitle}>
-            Supports JPEG, PNG, WEBP files up to 25 MB. Automatically detects layout, text alignment, font sizes, and mandatory fields.
-          </Text>
-
-          <View style={[styles.actionButtonGroup, isMobile && styles.actionButtonGroupMobile]}>
-            <TouchableOpacity 
-              style={styles.primaryUploadBtn} 
-              onPress={handlePickGallery}
-              activeOpacity={0.8}
-            >
-              <UploadIcon color="#FFFFFF" size={15} />
-              <Text style={styles.primaryUploadBtnText}>Choose Image File</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.videoScanBtn} 
-              onPress={startLiveVideoStream}
-              activeOpacity={0.8}
-            >
-              <VideoScanIcon color="#FFFFFF" size={15} />
-              <Text style={styles.videoScanBtnText}>Live Product Scan</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.secondaryDemoBtn} 
-              onPress={handleDemoScan}
-              activeOpacity={0.8}
-            >
-              <ZapIcon color="#475569" size={15} />
-              <Text style={styles.secondaryDemoBtnText}>Run Sample Demo</Text>
-            </TouchableOpacity>
-          </View>
+    <View style={{ flex: 1 }}>
+      <DemoBanner />
+      <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
+        {/* Navigation Bar */}
+        <View style={styles.navHeader}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Text style={styles.backBtnText}>← Back</Text>
+          </TouchableOpacity>
         </View>
-      </GlassCard>
+
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, isMobile && { fontSize: 20 }]}>Select Package Label Image</Text>
+          <Text style={styles.headerSubtitle}>
+            Upload file, capture live photo, or scan entire 360° product video to verify mandatory Legal Metrology declarations.
+          </Text>
+        </View>
+
+        {/* Upload Drop Zone Card */}
+        <GlassCard style={styles.dropZoneCard}>
+          <View style={styles.dropZoneInner}>
+            <View style={styles.iconCircle}>
+              <Text style={styles.iconCircleText}>SCAN</Text>
+            </View>
+
+            <Text style={styles.dropTitle}>Select Packaging Image for Inspection</Text>
+            <Text style={styles.dropSubtitle}>
+              Supports JPEG, PNG, WEBP files up to 25 MB. Automatically detects layout, text alignment, font sizes, and mandatory fields.
+            </Text>
+
+            <View style={[styles.actionButtonGroup, isMobile && styles.actionButtonGroupMobile]}>
+              <TouchableOpacity 
+                style={styles.primaryUploadBtn} 
+                onPress={handlePickGallery}
+                activeOpacity={0.8}
+              >
+                <UploadIcon color="#FFFFFF" size={15} />
+                <Text style={styles.primaryUploadBtnText}>Choose Image File</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.videoScanBtn} 
+                onPress={startLiveVideoStream}
+                activeOpacity={0.8}
+              >
+                <VideoScanIcon color="#FFFFFF" size={15} />
+                <Text style={styles.videoScanBtnText}>Live Product Scan</Text>
+              </TouchableOpacity>
+
+              {DEMO_MODE && (
+                <TouchableOpacity 
+                  style={styles.secondaryDemoBtn} 
+                  onPress={handleDemoScan}
+                  activeOpacity={0.8}
+                >
+                  <ZapIcon color="#475569" size={15} />
+                  <Text style={styles.secondaryDemoBtnText}>Run Sample Demo</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </GlassCard>
 
       {/* Live Video Product Scanner Modal */}
       <Modal visible={isVideoScanOpen} animationType="fade" transparent={true} onRequestClose={stopLiveVideoStream}>
@@ -276,6 +283,7 @@ export default function CaptureScreen({ navigation }: Props) {
         </View>
       </Modal>
     </ScrollView>
+    </View>
   );
 }
 
