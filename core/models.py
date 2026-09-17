@@ -75,8 +75,7 @@ class ModelRegistry:
                             use_angle_cls=True,
                             lang="en",
                             show_log=False,
-                            enable_mkldnn=True,
-                            cpu_threads=torch.get_num_threads()
+                            enable_mkldnn=False,
                         )
                     except Exception:
                         self.paddle_ocr = PaddleOCR(use_angle_cls=True, lang="en")

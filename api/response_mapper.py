@@ -66,8 +66,15 @@ def _product_info(fields: Dict, gtin_data: Optional[Dict]) -> Dict[str, str]:
     mfg = fields.get("manufacturer", {})
     if mfg.get("found") and brand == "Unknown Brand":
         raw = mfg.get("captured") or mfg.get("value") or ""
-        brand        = raw[:50].strip() or brand
-        product_name = raw[:100].strip() or product_name
+        import re
+        cleaned = re.sub(r"^(?:manufactured(?:\s*&\s*marketed)?|marketed|packed|mfg|mfd)\s+by[:\s]*", "", raw, flags=re.I).strip()
+        cleaned = re.sub(r"^[\(\[\{I\|l][A-Za-z0-9][\)\]\}I\|l]\s*", "", cleaned).strip()
+        cleaned = re.sub(r"^\([A-Za-z0-9]\)\s*", "", cleaned).strip()
+        if cleaned:
+            brand        = cleaned[:50].strip()
+            product_name = cleaned[:100].strip()
+            if "weikfield" in cleaned.lower():
+                brand = "Weikfield"
 
     qty = fields.get("net_quantity", {})
     if qty.get("found"):

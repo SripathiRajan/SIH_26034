@@ -38,7 +38,15 @@ class DeclarationExtractor:
             re.IGNORECASE,
         )
         self.date_pattern = re.compile(
-            r"(?:mfg|pkd|mfd|packed|manufactured|best\s+before|expiry|exp)[:\s]*([0-9]{1,2}[\/\-\.][0-9]{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s\.\,\-\/]+[0-9]{2,4})",
+            r"(?:mfg|pkd|mfd|packed|manufactured|date\s*of\s*(?:mfg|pkg|packing|packaging)|dom)[:\s]*([0-9]{1,2}[\/\-\.][0-9]{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|0ct|1un)[a-z0-9]*[\s\.\,\-\/]+[0-9]{2,4}|\b\d{4}\b)",
+            re.IGNORECASE,
+        )
+        self.use_by_pattern = re.compile(
+            r"(?:use\s*by|best\s*before|expiry|exp\.?|expires?|bb\.?)[:\s]*([0-9]{1,2}[\/\-\.][0-9]{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|0ct|1un)[a-z0-9]*[\s\.\,\-\/]+[0-9]{2,4}|\w+\/\d{4}|\d+\s+months)",
+            re.IGNORECASE,
+        )
+        self.fssai_pattern = re.compile(
+            r"(?:fssai|fsat|fssal|issai|lic(?:ense)?\.?\s*(?:no\.?)?|lic\s*#)[\s\S]{0,25}?[:\-]?\s*([0-9\s]{10,18})|\b([0-9]{14})\b",
             re.IGNORECASE,
         )
         self.standalone_date_pattern = re.compile(
@@ -57,7 +65,7 @@ class DeclarationExtractor:
             re.IGNORECASE,
         )
         self.manufacturer_pattern = re.compile(
-            r"(?:manufactured\s+by|marketed\s+by|packed\s+by|imported\s+by)[:\s]*([^\n\r]+)",
+            r"(?:manufactured(?:\s*&\s*marketed)?\s+by|manufactured\s+by|marketed\s+by|packed\s+by|imported\s+by)[:\s]*([^\n\r]+)",
             re.IGNORECASE,
         )
 
@@ -79,9 +87,11 @@ class DeclarationExtractor:
             "mrp": self._extract_mrp(tokens, full_text, avg_ocr_conf, engine_agreement_score),
             "net_quantity": self._extract_net_qty(tokens, full_text, avg_ocr_conf, engine_agreement_score),
             "date_of_packing": self._extract_date(tokens, full_text, avg_ocr_conf, engine_agreement_score),
+            "use_by": self._extract_use_by(tokens, full_text, avg_ocr_conf, engine_agreement_score),
             "consumer_care": self._extract_consumer_care(tokens, full_text, avg_ocr_conf, engine_agreement_score),
             "country_of_origin": self._extract_country_of_origin(tokens, full_text, avg_ocr_conf, engine_agreement_score),
             "manufacturer_details": self._extract_manufacturer(tokens, full_text, avg_ocr_conf, engine_agreement_score),
+            "fssai": self._extract_fssai(tokens, full_text, avg_ocr_conf, engine_agreement_score),
         }
 
         return declarations
@@ -365,9 +375,9 @@ class DeclarationExtractor:
                 "needs_review": bool(conf < self.confidence_threshold),
             }
 
-        # Stage 2: Look for 'India' or common origins
+        # Stage 2: Look for 'India' or common origins in tokens or full text
         for token in tokens:
-            if token.text.strip().lower() in ["india", "bharat", "made in india"]:
+            if re.search(r"\b(india|bharat|made in india)\b", token.text, re.I):
                 conf = self._compute_confidence(token.confidence, is_stage_one=False, engine_agreement=engine_agreement)
                 return {
                     "found": True,
@@ -376,6 +386,16 @@ class DeclarationExtractor:
                     "confidence": conf,
                     "needs_review": bool(conf < self.confidence_threshold),
                 }
+
+        if re.search(r"\b(india|bharat)\b", full_text, re.I):
+            conf = self._compute_confidence(avg_ocr_conf, is_stage_one=False, engine_agreement=engine_agreement)
+            return {
+                "found": True,
+                "rawValue": "India",
+                "parsedValue": {"country": "India"},
+                "confidence": conf,
+                "needs_review": bool(conf < self.confidence_threshold),
+            }
 
         return {"found": False, "rawValue": None, "confidence": 0.0, "needs_review": False}
 
@@ -413,6 +433,100 @@ class DeclarationExtractor:
                     "found": True,
                     "rawValue": combined_text,
                     "parsedValue": {"name_and_address": combined_text},
+                    "confidence": conf,
+                    "needs_review": bool(conf < self.confidence_threshold),
+                }
+
+        return {"found": False, "rawValue": None, "confidence": 0.0, "needs_review": False}
+
+    # -------------------------------------------------------------------------
+    # Field 7: Use By / Expiry
+    # -------------------------------------------------------------------------
+    def _extract_use_by(
+        self,
+        tokens: List[TextPolygon],
+        full_text: str,
+        avg_ocr_conf: float,
+        engine_agreement: float,
+    ) -> Dict[str, Any]:
+        match = self.use_by_pattern.search(full_text)
+        if match:
+            matched_str = match.group(0)
+            date_val = match.group(1) if match.groups() else matched_str
+            token_conf = self._find_token_confidence(matched_str, tokens, avg_ocr_conf)
+            conf = self._compute_confidence(token_conf, is_stage_one=True, engine_agreement=engine_agreement)
+            return {
+                "found": True,
+                "rawValue": matched_str,
+                "parsedValue": {"date_string": date_val},
+                "confidence": conf,
+                "needs_review": bool(conf < self.confidence_threshold),
+            }
+
+        # Stage 2: Contextual fallback
+        for i, token in enumerate(tokens):
+            t_upper = token.text.upper()
+            if any(kw in t_upper for kw in ["USEBY", "USE BY", "BEST BEFORE", "EXPIRY", "EXP"]):
+                for j in range(max(0, i - 1), min(len(tokens), i + 4)):
+                    if j == i:
+                        continue
+                    date_cand = re.search(r"([0-9A-Za-z]{3,4}[\/\-]20\d{2}|\d{1,2}[\/\-]20\d{2})", tokens[j].text, re.I)
+                    if date_cand:
+                        token_conf = (token.confidence + tokens[j].confidence) / 2.0
+                        conf = self._compute_confidence(token_conf, is_stage_one=False, engine_agreement=engine_agreement)
+                        return {
+                            "found": True,
+                            "rawValue": f"{token.text} {tokens[j].text}",
+                            "parsedValue": {"date_string": date_cand.group(1)},
+                            "confidence": conf,
+                            "needs_review": bool(conf < self.confidence_threshold),
+                        }
+
+        return {"found": False, "rawValue": None, "confidence": 0.0, "needs_review": False}
+
+    # -------------------------------------------------------------------------
+    # Field 8: FSSAI License Number
+    # -------------------------------------------------------------------------
+    def _extract_fssai(
+        self,
+        tokens: List[TextPolygon],
+        full_text: str,
+        avg_ocr_conf: float,
+        engine_agreement: float,
+    ) -> Dict[str, Any]:
+        match = self.fssai_pattern.search(full_text)
+        if match:
+            captured_val = None
+            if match.groups():
+                for g in match.groups():
+                    if g and g.strip():
+                        captured_val = g.strip()
+                        break
+            if not captured_val:
+                captured_val = match.group(0).strip()
+
+            cleaned_digits = re.sub(r"\D", "", captured_val)
+            if len(cleaned_digits) >= 10:
+                matched_str = match.group(0).strip()
+                token_conf = self._find_token_confidence(matched_str, tokens, avg_ocr_conf)
+                conf = self._compute_confidence(token_conf, is_stage_one=True, engine_agreement=engine_agreement)
+                return {
+                    "found": True,
+                    "rawValue": matched_str,
+                    "parsedValue": {"license_number": cleaned_digits},
+                    "confidence": conf,
+                    "needs_review": bool(conf < self.confidence_threshold or len(cleaned_digits) < 14),
+                }
+
+        # Stage 2: Contextual fallback (token with lic or fssai + digits)
+        for token in tokens:
+            cleaned = re.sub(r"\D", "", token.text)
+            if len(cleaned) in (12, 14):
+                conf = self._compute_confidence(token.confidence, is_stage_one=False, engine_agreement=engine_agreement)
+                return {
+                    "found": True,
+                    "rawValue": token.text,
+                    "parsedValue": {"license_number": cleaned},
                     "confidence": conf,
                     "needs_review": bool(conf < self.confidence_threshold),
                 }

@@ -45,10 +45,10 @@ os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 os.environ["PYTHONIOENCODING"] = "utf-8"
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
-num_cpus = str(os.cpu_count() or 4)
-os.environ["OMP_NUM_THREADS"] = num_cpus
-os.environ["MKL_NUM_THREADS"] = num_cpus
-os.environ["OPENBLAS_NUM_THREADS"] = num_cpus
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 
 # Image Preprocessing & OCR Constraints
 MAX_IMAGE_LONG_EDGE = 1600

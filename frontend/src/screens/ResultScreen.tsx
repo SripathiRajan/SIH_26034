@@ -269,7 +269,9 @@ export default function ResultScreen({ navigation, route }: Props) {
 
               {field.confidence !== undefined && (
                 <View style={styles.confidenceBadge}>
-                  <Text style={styles.confidenceText}>{field.confidence?.toFixed(1)}%</Text>
+                  <Text style={styles.confidenceText}>
+                    {((field.confidence <= 1.0 ? field.confidence * 100 : field.confidence) || 0).toFixed(0)}%
+                  </Text>
                   <Text style={styles.confidenceLabel}>Conf.</Text>
                 </View>
               )}

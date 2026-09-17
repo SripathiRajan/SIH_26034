@@ -71,13 +71,37 @@ class ApiClient {
       const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT_MS || 30000);
 
       const formData = new FormData();
-      if (Platform.OS === 'web' && imageUri.startsWith('blob:')) {
-        const blobRes = await fetch(imageUri);
-        const blob = await blobRes.blob();
-        formData.append('image', blob, 'label_scan.jpg');
-        formData.append('file', blob, 'label_scan.jpg');
+      if (Platform.OS === 'web') {
+        let blob: Blob | null = null;
+        if (imageUri.startsWith('data:')) {
+          const arr = imageUri.split(',');
+          const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+          const bstr = atob(arr[1]);
+          let n = bstr.length;
+          const u8arr = new Uint8Array(n);
+          while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+          }
+          blob = new Blob([u8arr], { type: mime });
+        } else if (imageUri.startsWith('blob:') || imageUri.startsWith('http')) {
+          try {
+            const blobRes = await fetch(imageUri);
+            blob = await blobRes.blob();
+          } catch (e) {
+            console.warn('[ApiClient] Failed to fetch image blob on web:', e);
+          }
+        }
+        if (blob) {
+          formData.append('image', blob, 'label_scan.jpg');
+          formData.append('file', blob, 'label_scan.jpg');
+        } else {
+          // @ts-ignore
+          formData.append('image', { uri: imageUri, name: 'label_scan.jpg', type: 'image/jpeg' });
+          // @ts-ignore
+          formData.append('file', { uri: imageUri, name: 'label_scan.jpg', type: 'image/jpeg' });
+        }
       } else {
-        // @ts-ignore
+        // Native React Native
         const fileObj = {
           uri: imageUri,
           name: 'label_scan.jpg',
@@ -96,7 +120,8 @@ class ApiClient {
       // Progress animation trigger
       if (onProgress) onProgress(1);
 
-      const response = await fetch(`${this.baseUrl}/api/analyze`, {
+      const scanEndpoint = API_CONFIG.ENDPOINTS.SCAN || '/api/scan';
+      const response = await fetch(`${this.baseUrl}${scanEndpoint}`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: formData,
@@ -108,6 +133,9 @@ class ApiClient {
         if (onProgress) onProgress(4);
         const data = await response.json();
         return this.normalizeScanRecord(data, imageUri);
+      } else {
+        const errorText = await response.text().catch(() => '');
+        console.warn(`[ApiClient] Scan API error HTTP ${response.status}: ${errorText}`);
       }
     } catch (err) {
       // Graceful fallback to local pipeline simulation

@@ -73,17 +73,16 @@ def ensemble_scan(
             found_t1 = sum(1 for v in fields_t1.values() if v["found"])
 
             # Fast path check:
-            # If not use_ensemble (default fast mode):
-            # If PaddleOCR produced confident detections, skip Tier 2 & retries for sub-second speed!
-            # If use_ensemble is requested, only skip if all mandatory fields found with high confidence.
-            if not use_ensemble:
-                if avg_conf >= 0.60 or len(paddle_results) >= 2 or found_t1 >= 1:
-                    logger.info(f"  ⚡ Fast exit triggered (conf={avg_conf:.2f}, tokens={len(paddle_results)}) — skipping Tier 2")
-                    skip_tier2 = True
+            # Only skip Tier 2 if all mandatory fields are already found (or flap pointer detected)
+            unaccounted_t1 = [
+                k for k, v in fields_t1.items()
+                if not v["found"] and not (flap_t1.get("flap_detected") and k in {"mrp", "manufacture_date", "use_by", "net_quantity"})
+            ]
+            if len(unaccounted_t1) == 0 and avg_conf >= 0.60:
+                logger.info(f"  ⚡ Fast exit triggered (conf={avg_conf:.2f}, all {found_t1} fields found) — skipping Tier 2")
+                skip_tier2 = True
             else:
-                if avg_conf >= OCR_CONFIDENCE_THRESHOLD and found_t1 == len(MANDATORY_FIELDS):
-                    logger.info(f"  ⚡ Fast exit in ensemble mode (conf={avg_conf:.2f}, all {found_t1} fields found)")
-                    skip_tier2 = True
+                logger.info(f"  Stage 1 found {found_t1}/{len(MANDATORY_FIELDS)} fields ({len(unaccounted_t1)} unaccounted). Proceeding with Tier 2 recovery.")
 
         if not skip_tier2:
             # ── Stage 2: Tier 2 EasyOCR + SuryaOCR (targeted recovery) ──────
