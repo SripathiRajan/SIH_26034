@@ -4,7 +4,7 @@ Provides GTIN barcode verification and product master management.
 """
 
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -64,7 +64,7 @@ def get_product_by_gtin(gtin: str, db: Session = Depends(get_db)):
             standardNetQuantity=lookup_res.get("net_weight"),
             expectedMrpMin=lookup_res.get("mrp"),
             expectedMrpMax=lookup_res.get("mrp"),
-            updatedAt=datetime.utcnow().isoformat(),
+            updatedAt=datetime.now(timezone.utc).isoformat(),
         )
 
     raise HTTPException(status_code=404, detail=f"Product with GTIN {gtin} not found")
@@ -73,7 +73,7 @@ def get_product_by_gtin(gtin: str, db: Session = Depends(get_db)):
 @router.post("/api/products", response_model=ProductMasterResponse, status_code=status.HTTP_201_CREATED)
 def create_or_update_product(data: ProductMasterCreate, db: Session = Depends(get_db)):
     record = db.query(ProductMasterDB).filter(ProductMasterDB.gtin == data.gtin).first()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     if record:
         record.brand = data.brand

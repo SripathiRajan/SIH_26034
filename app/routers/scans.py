@@ -17,6 +17,7 @@ from collections import Counter
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Query, status, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel
 
 from core.config import UPLOAD_DIR, SCAN_HISTORY_PAGE_SIZE, BASE_DIR
@@ -156,12 +157,8 @@ async def analyze_package_image(
 
         # 3. Check for annotated image
         annotated_name = f"ensemble_{scan_id}_result.png"
-        src = os.path.join(BASE_DIR, f"ensemble_{os.path.splitext(os.path.basename(file_path))[0]}_result.png")
-        dst = os.path.join(UPLOAD_DIR, annotated_name)
-        if os.path.exists(src):
-            shutil.move(src, dst)
-
-        image_uri = f"/uploads/{annotated_name}" if os.path.exists(dst) else f"/uploads/{os.path.basename(file_path)}"
+        annotated_path = os.path.join(UPLOAD_DIR, annotated_name)
+        image_uri = f"/uploads/{annotated_name}" if os.path.exists(annotated_path) else f"/uploads/{os.path.basename(file_path)}"
 
         # 4. Map report to frontend contract
         scan_record = pipeline_report_to_scan_record(report, scan_id, image_uri, gtin_data)
@@ -176,7 +173,7 @@ async def analyze_package_image(
             status=scan_record["status"],
             authenticity_score=scan_record["complianceConfidence"],
             thumbnail_color=scan_record["thumbnailColor"],
-            image_path=dst if os.path.exists(dst) else file_path,
+            image_path=annotated_path if os.path.exists(annotated_path) else file_path,
             processing_time=scan_record.get("processingTime"),
             compliance_score=report.get("compliance_score"),
             fields_json=json.dumps(scan_record["fields"]),
@@ -293,9 +290,9 @@ def get_scan_pdf(scan_id: str, user=Depends(require_current_user), db: Session =
 def get_dashboard_stats(user=Depends(require_current_user), db: Session = Depends(get_db)):
     """
     Aggregates compliance metrics for the React Native Dashboard screen & test suites.
+    Uses SQL aggregation for high efficiency across large audit tables.
     """
-    all_records = db.query(ScanRecordDB).all()
-    total = len(all_records)
+    total = db.query(func.count(ScanRecordDB.id)).scalar() or 0
 
     if total == 0:
         return {
@@ -316,47 +313,65 @@ def get_dashboard_stats(user=Depends(require_current_user), db: Session = Depend
             "zoneBreakdown": [],
         }
 
-    pass_c = sum(1 for r in all_records if r.status == "pass")
-    warn_c = sum(1 for r in all_records if r.status == "warning")
-    nr_c = sum(1 for r in all_records if r.status == "needs_review")
-    fail_only = sum(1 for r in all_records if r.status == "fail")
+    status_counts_raw = db.query(ScanRecordDB.status, func.count(ScanRecordDB.id)).group_by(ScanRecordDB.status).all()
+    sc_dict = dict(status_counts_raw)
+    pass_c = sc_dict.get("pass", 0)
+    warn_c = sc_dict.get("warning", 0)
+    nr_c = sc_dict.get("needs_review", 0)
+    fail_only = sc_dict.get("fail", 0)
     fail_c = fail_only + nr_c
     non_c = warn_c + fail_c
-    flags = sum(1 for r in all_records if (r.authenticity_score or 0) < 50)
-    avg_t = round(sum(r.processing_time or 0.0 for r in all_records) / total, 2)
+
+    flags = db.query(func.count(ScanRecordDB.id)).filter(ScanRecordDB.authenticity_score < 50).scalar() or 0
+    raw_avg = db.query(func.avg(ScanRecordDB.processing_time)).scalar()
+    avg_t = round(float(raw_avg), 2) if raw_avg else 0.0
     compliance_rate = round(pass_c / total * 100, 1)
 
+    recent_rows = db.query(ScanRecordDB).order_by(ScanRecordDB.scanned_at.desc()).limit(5).all()
+    recent = [_format_scan_record(r) for r in recent_rows]
+
+    # Sample latest records for field violation breakdown, brands, and daily counts
+    sampled_rows = db.query(
+        ScanRecordDB.fields_json,
+        ScanRecordDB.brand,
+        ScanRecordDB.status,
+        ScanRecordDB.scanned_at,
+        ScanRecordDB.gtin
+    ).order_by(ScanRecordDB.scanned_at.desc()).limit(1000).all()
+
     field_fails = Counter()
-    for r in all_records:
-        for f in r.fields_list():
+    brand_v = Counter()
+    daily: Dict[str, Any] = {}
+
+    for r in sampled_rows:
+        f_list = []
+        try:
+            f_list = json.loads(r.fields_json) if isinstance(r.fields_json, str) else (r.fields_json or [])
+        except Exception:
+            pass
+        for f in f_list:
             if f.get("status") in ("fail", "warning", "needs_review"):
                 field_fails[f.get("label") or f.get("fieldName") or "Unknown"] += 1
 
-    brand_v = Counter()
-    for r in all_records:
         if r.status in ("warning", "fail", "needs_review"):
-            brand_v[r.brand] += 1
+            brand_v[r.brand or "Unknown Brand"] += 1
 
-    daily: Dict[str, Any] = {}
-    for r in all_records:
-        d = r.scanned_at.strftime("%Y-%m-%d")
-        if d not in daily:
-            daily[d] = {"day": d, "pass": 0, "warning": 0, "fail": 0}
-        stat_key = "fail" if r.status == "needs_review" else r.status
-        daily[d][stat_key] = daily[d].get(stat_key, 0) + 1
-
-    recent = [_format_scan_record(r) for r in sorted(all_records, key=lambda x: x.scanned_at, reverse=True)[:5]]
+        d = r.scanned_at.strftime("%Y-%m-%d") if r.scanned_at else ""
+        if d:
+            if d not in daily:
+                daily[d] = {"day": d, "pass": 0, "warning": 0, "fail": 0}
+            stat_key = "fail" if r.status == "needs_review" else r.status
+            daily[d][stat_key] = daily[d].get(stat_key, 0) + 1
 
     # Real category breakdown, derived from the product master catalog via scanned GTINs.
-    # Scans without a known GTIN/category are reported as Uncategorized — no fabricated splits.
-    gtins = [r.gtin for r in all_records if r.gtin]
+    gtins = [r.gtin for r in sampled_rows if r.gtin]
     gtin_category: Dict[str, Optional[str]] = {}
     if gtins:
         for pm in db.query(ProductMasterDB).filter(ProductMasterDB.gtin.in_(gtins)).all():
             gtin_category[pm.gtin] = pm.category
     cat_counts: Counter = Counter()
     cat_violations: Counter = Counter()
-    for r in all_records:
+    for r in sampled_rows:
         category = (gtin_category.get(r.gtin) if r.gtin else None) or "Uncategorized"
         cat_counts[category] += 1
         if r.status in ("warning", "fail", "needs_review"):

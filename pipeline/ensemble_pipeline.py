@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List
 
 from core.image_utils import resize_for_ocr, enhance_image
-from core.config import BASE_DIR
+from core.config import BASE_DIR, UPLOAD_DIR
 from core.logger import logger
 from ocr.paddle_engine import run_paddle_ocr
 from ocr.easyocr_engine import run_easyocr
@@ -225,5 +225,5 @@ def save_annotated_image(image_path: str, all_results: List[Dict[str, Any]], rep
     cv2.putText(img, banner, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
 
     basename = os.path.splitext(os.path.basename(image_path))[0]
-    out_path = os.path.join(BASE_DIR, f"ensemble_{basename}_result.png")
+    out_path = os.path.join(UPLOAD_DIR, f"ensemble_{basename}_result.png")
     cv2.imwrite(out_path, img)

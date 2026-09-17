@@ -3,7 +3,7 @@ JWT Authentication Handler & Password Hasher
 Scoped tokens for dashboard, persistence, sync, and inspector reporting.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import os
 from typing import Optional, Dict, Any
@@ -48,7 +48,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (
+    expire = datetime.now(timezone.utc) + (
         expires_delta if expires_delta else timedelta(minutes=settings.JWT_EXPIRY_MINUTES)
     )
     to_encode.update({"exp": expire})

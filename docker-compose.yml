@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: praman_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=sqlite:///./praman.db
+      - JWT_SECRET_KEY=praman_production_super_secret_key_change_me_in_prod
+      - CORS_ORIGINS=http://localhost:8081,http://localhost:19006,http://127.0.0.1:8081
+    volumes:
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+      - praman_cache:/app/.cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  praman_cache:

@@ -1,7 +1,7 @@
 # core/db_models.py
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Float, Integer, DateTime, Text, Boolean, JSON
 from core.database import Base
 
@@ -27,7 +27,7 @@ class ScanRecordDB(Base):
     compliance_score   = Column(Float,       nullable=True)
     fields_json        = Column(Text,        nullable=False, default="[]")
     ocr_engines_json   = Column(Text,        nullable=False, default="[]")
-    scanned_at         = Column(DateTime,    nullable=False, default=datetime.utcnow)
+    scanned_at         = Column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
     user_id            = Column(String(64),  nullable=True)
     notes              = Column(Text,        nullable=True, default="")
 
@@ -77,7 +77,7 @@ class UserDB(Base):
     role            = Column(String(32),  nullable=False, default="inspector")
     zone            = Column(String(128), nullable=True)   # for zoneBreakdown stats
     is_active       = Column(Boolean,     nullable=False, default=True)
-    created_at      = Column(DateTime,    nullable=False, default=datetime.utcnow)
+    created_at      = Column(DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
 class ProductMasterDB(Base):
@@ -98,5 +98,5 @@ class ProductMasterDB(Base):
     category              = Column(String(128),  nullable=True)
     country_origin        = Column(String(64),   nullable=True)
     logo_embedding        = Column(Text,         nullable=True)
-    created_at            = Column(DateTime,     nullable=False, default=datetime.utcnow)
-    updated_at            = Column(DateTime,     nullable=False, default=datetime.utcnow)
+    created_at            = Column(DateTime,     nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at            = Column(DateTime,     nullable=False, default=lambda: datetime.now(timezone.utc))

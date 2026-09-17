@@ -19,17 +19,11 @@ except Exception:
     torch = None
     USE_GPU = False
 
-# Resilient model cache directories (defaults to .cache in project root if D: drives not present)
+# Resilient model cache directories (defaults to .cache in project root)
 DEFAULT_CACHE_BASE = os.path.join(BASE_DIR, ".cache")
-CACHE_DIR = os.environ.get("HF_HOME") or (
-    r"D:\huggingface_cache" if os.path.exists(r"D:\huggingface_cache") else os.path.join(DEFAULT_CACHE_BASE, "huggingface")
-)
-TORCH_CACHE = os.environ.get("TORCH_HOME") or (
-    r"D:\torch_cache" if os.path.exists(r"D:\torch_cache") else os.path.join(DEFAULT_CACHE_BASE, "torch")
-)
-EASYOCR_CACHE = os.environ.get("EASYOCR_MODULE_PATH") or (
-    r"D:\easyocr_models" if os.path.exists(r"D:\easyocr_models") else os.path.join(DEFAULT_CACHE_BASE, "easyocr")
-)
+CACHE_DIR = os.environ.get("HF_HOME") or os.path.join(DEFAULT_CACHE_BASE, "huggingface")
+TORCH_CACHE = os.environ.get("TORCH_HOME") or os.path.join(DEFAULT_CACHE_BASE, "torch")
+EASYOCR_CACHE = os.environ.get("EASYOCR_MODULE_PATH") or os.path.join(DEFAULT_CACHE_BASE, "easyocr")
 
 # Ensure directories exist
 for path in [UPLOAD_DIR, CACHE_DIR, TORCH_CACHE, EASYOCR_CACHE]:
