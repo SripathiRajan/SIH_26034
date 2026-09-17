@@ -11,6 +11,10 @@ from fastapi.staticfiles import StaticFiles
 from core.config import UPLOAD_DIR, CORS_ORIGINS
 from core.database import create_tables
 from core.logger import logger
+from core.limiter import limiter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.routers import auth, scans, product, sync, rules, chat, legacy
 
@@ -21,10 +25,15 @@ app = FastAPI(
     version="4.0.0",
 )
 
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

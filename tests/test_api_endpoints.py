@@ -20,6 +20,28 @@ def client():
     return TestClient(app)
 
 
+@pytest.fixture(scope="module")
+def auth_token(client):
+    username = f"officer_auth_{np.random.randint(1000, 9999)}"
+    password = "SecurePassword123!"
+    reg_resp = client.post(
+        "/api/auth/register",
+        json={"username": username, "password": password},
+    )
+    assert reg_resp.status_code == 201
+    login_resp = client.post(
+        "/api/auth/login",
+        json={"username": username, "password": password},
+    )
+    assert login_resp.status_code == 200
+    return login_resp.json()["access_token"]
+
+
+@pytest.fixture(scope="module")
+def auth_headers(auth_token):
+    return {"Authorization": f"Bearer {auth_token}"}
+
+
 def _generate_test_image_bytes(text: str = "MRP Rs. 299 (incl. of all taxes) Net Wt: 500 g") -> bytes:
     img = np.zeros((200, 400, 3), dtype=np.uint8)
     cv2.putText(img, text, (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
@@ -48,10 +70,17 @@ def test_auth_registration_login_and_me(client):
     username = f"inspector_test_{np.random.randint(1000, 9999)}"
     password = "SecurePassword123!"
 
-    # 1. Register
+    # 0. Short password (< 8 chars) should fail
+    short_resp = client.post(
+        "/api/auth/register",
+        json={"username": f"{username}_short", "password": "123"},
+    )
+    assert short_resp.status_code == 400
+
+    # 1. Register with attempted role spoofing (should be locked to inspector)
     reg_resp = client.post(
         "/api/auth/register",
-        json={"username": username, "password": password, "role": "inspector"},
+        json={"username": username, "password": password, "role": "admin"},
     )
     assert reg_resp.status_code == 201
     reg_data = reg_resp.json()
@@ -140,6 +169,13 @@ def test_analyze_endpoint_with_gtin(client):
         },
     )
 
+    # Reject non-image file upload
+    bad_resp = client.post(
+        "/api/analyze",
+        files={"image": ("script.sh", b"#!/bin/bash\necho hack", "text/plain")},
+    )
+    assert bad_resp.status_code == 400
+
     response = client.post(
         "/api/analyze",
         files={"image": ("label_burst.jpg", img_bytes, "image/jpeg")},
@@ -158,7 +194,7 @@ def test_analyze_endpoint_with_gtin(client):
 # 5. Scans Persistence & CRUD Tests
 # =============================================================================
 
-def test_scans_list_detail_and_delete(client):
+def test_scans_list_detail_and_delete(client, auth_headers):
     img_bytes = _generate_test_image_bytes()
     analyze_resp = client.post(
         "/api/analyze",
@@ -167,26 +203,32 @@ def test_scans_list_detail_and_delete(client):
     assert analyze_resp.status_code == 200
     scan_id = analyze_resp.json()["id"]
 
-    # 1. List scans
-    list_resp = client.get("/api/scans?limit=10&offset=0")
+    # 0. Unauthorized access should return 401
+    unauth_resp = client.get("/api/scans?limit=10&offset=0")
+    assert unauth_resp.status_code == 401
+
+    # 1. List scans with auth
+    list_resp = client.get("/api/scans?limit=10&offset=0", headers=auth_headers)
     assert list_resp.status_code == 200
     list_data = list_resp.json()
     assert list_data["total"] >= 1
     found = any(s["id"] == scan_id for s in list_data["items"])
     assert found is True
 
-    # 2. Detail scan
-    detail_resp = client.get(f"/api/scans/{scan_id}")
+    # 2. Detail scan (401 without auth, 200 with auth)
+    assert client.get(f"/api/scans/{scan_id}").status_code == 401
+    detail_resp = client.get(f"/api/scans/{scan_id}", headers=auth_headers)
     assert detail_resp.status_code == 200
     assert detail_resp.json()["id"] == scan_id
 
-    # 3. Delete scan
-    del_resp = client.delete(f"/api/scans/{scan_id}")
+    # 3. Delete scan (401 without auth, 200 with auth)
+    assert client.delete(f"/api/scans/{scan_id}").status_code == 401
+    del_resp = client.delete(f"/api/scans/{scan_id}", headers=auth_headers)
     assert del_resp.status_code == 200
     assert del_resp.json()["status"] == "success"
 
     # 4. Detail should now return 404
-    detail_after = client.get(f"/api/scans/{scan_id}")
+    detail_after = client.get(f"/api/scans/{scan_id}", headers=auth_headers)
     assert detail_after.status_code == 404
 
 
@@ -194,7 +236,7 @@ def test_scans_list_detail_and_delete(client):
 # 6. PDF Audit Report Export Test
 # =============================================================================
 
-def test_export_pdf_report(client):
+def test_export_pdf_report(client, auth_headers):
     img_bytes = _generate_test_image_bytes("MRP Rs. 50 (incl. of all taxes) Net Qty: 100 g")
     analyze_resp = client.post(
         "/api/analyze",
@@ -203,7 +245,12 @@ def test_export_pdf_report(client):
     assert analyze_resp.status_code == 200
     scan_id = analyze_resp.json()["id"]
 
-    pdf_resp = client.get(f"/api/scans/{scan_id}/report.pdf")
+    # 0. Unauthorized access should return 401
+    unauth_pdf = client.get(f"/api/scans/{scan_id}/report.pdf")
+    assert unauth_pdf.status_code == 401
+
+    # 1. Authorized download
+    pdf_resp = client.get(f"/api/scans/{scan_id}/report.pdf", headers=auth_headers)
     assert pdf_resp.status_code == 200
     assert pdf_resp.headers["content-type"] == "application/pdf"
     assert "attachment" in pdf_resp.headers["content-disposition"]
@@ -215,8 +262,13 @@ def test_export_pdf_report(client):
 # 7. Compliance Stats & Analytics Test
 # =============================================================================
 
-def test_compliance_stats(client):
-    response = client.get("/api/stats")
+def test_compliance_stats(client, auth_headers):
+    # 0. Unauthorized access should return 401
+    unauth_stats = client.get("/api/stats")
+    assert unauth_stats.status_code == 401
+
+    # 1. Authorized fetch
+    response = client.get("/api/stats", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert "totalScans" in data

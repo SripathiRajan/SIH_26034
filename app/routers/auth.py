@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from core.database import get_db
 from core.db_models import UserDB
 from core.auth import hash_password, verify_password, create_access_token, get_current_user
+from core.limiter import limiter
 
 router = APIRouter(tags=["Authentication"])
 
@@ -92,6 +93,9 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="User already registered")
 
+    if len(req.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
     user_id = uuid.uuid4().hex
     user = UserDB(
         id=user_id,
@@ -99,7 +103,7 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         username=req.username or identifier,
         hashed_password=hash_password(req.password),
         full_name=req.full_name or req.username,
-        role=req.role or "inspector",
+        role="inspector",  # Always default to inspector; client-supplied role is ignored
     )
     db.add(user)
     db.commit()
@@ -122,7 +126,8 @@ def token_form(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 
 @router.post("/api/auth/login", response_model=LoginResponse)
-def login_json(payload: LoginJSONRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login_json(request: Request, payload: LoginJSONRequest, db: Session = Depends(get_db)):
     identifier = payload.username or payload.email
     if not identifier:
         raise HTTPException(status_code=400, detail="Username or email is required")

@@ -14,7 +14,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 from collections import Counter
 
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Query, status
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Query, status, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -23,7 +23,8 @@ from core.config import UPLOAD_DIR, SCAN_HISTORY_PAGE_SIZE, BASE_DIR
 from core.logger import logger
 from core.database import get_db
 from core.db_models import ScanRecordDB, ProductMasterDB
-from core.auth import get_current_user
+from core.auth import get_current_user, require_current_user
+from core.limiter import limiter
 from pipeline.ensemble_pipeline import ensemble_scan
 from api.response_mapper import pipeline_report_to_scan_record
 from app.services.scan_service import ScanService
@@ -75,7 +76,9 @@ def _format_scan_record(r: ScanRecordDB) -> Dict[str, Any]:
 @router.post("/api/analyze")
 @router.post("/api/scan")
 @router.post("/api/scans")
+@limiter.limit("20/minute")
 async def analyze_package_image(
+    request: Request,
     image: Optional[UploadFile] = File(None),
     file: Optional[UploadFile] = File(None),
     gtin: Optional[str] = Form(None),
@@ -92,12 +95,39 @@ async def analyze_package_image(
     if not upload:
         raise HTTPException(status_code=400, detail="An image or file upload is required")
 
+    ALLOWED_MAGIC = {
+        b'\xff\xd8\xff': '.jpg',
+        b'\x89PNG': '.png',
+        b'RIFF': '.webp'
+    }
+    MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+
+    header = await upload.read(4)
+    await upload.seek(0)
+
+    ext = None
+    for magic, extension in ALLOWED_MAGIC.items():
+        if header.startswith(magic):
+            ext = extension
+            break
+    if not ext:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image format. Only JPEG, PNG, and WebP images with valid headers are accepted."
+        )
+
+    content = await upload.read()
+    if len(content) > MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds maximum allowable size of {MAX_BYTES // (1024 * 1024)}MB"
+        )
+
     scan_id = f"scan_{uuid.uuid4().hex[:12]}"
-    ext = os.path.splitext(upload.filename or "img.jpg")[1] or ".jpg"
     file_path = os.path.join(UPLOAD_DIR, f"{scan_id}{ext}")
 
     with open(file_path, "wb") as f:
-        shutil.copyfileobj(upload.file, f)
+        f.write(content)
 
     try:
         # 1. Barcode GTIN cross-check
@@ -174,6 +204,7 @@ def list_scans(
     limit: Optional[int] = Query(None, ge=1, le=100),
     offset: Optional[int] = Query(None, ge=0),
     status_filter: Optional[str] = Query(None, alias="status"),
+    user=Depends(require_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -203,7 +234,7 @@ def list_scans(
 
 
 @router.get("/api/scans/{scan_id}")
-def get_scan(scan_id: str, db: Session = Depends(get_db)):
+def get_scan(scan_id: str, user=Depends(require_current_user), db: Session = Depends(get_db)):
     record = db.query(ScanRecordDB).filter(ScanRecordDB.id == scan_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Scan record not found")
@@ -211,7 +242,7 @@ def get_scan(scan_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/api/scans/{scan_id}")
-def delete_scan(scan_id: str, db: Session = Depends(get_db)):
+def delete_scan(scan_id: str, user=Depends(require_current_user), db: Session = Depends(get_db)):
     record = db.query(ScanRecordDB).filter(ScanRecordDB.id == scan_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Scan record not found")
@@ -222,7 +253,7 @@ def delete_scan(scan_id: str, db: Session = Depends(get_db)):
 
 @router.get("/api/scans/{scan_id}/pdf")
 @router.get("/api/scans/{scan_id}/report.pdf")
-def get_scan_pdf(scan_id: str, db: Session = Depends(get_db)):
+def get_scan_pdf(scan_id: str, user=Depends(require_current_user), db: Session = Depends(get_db)):
     from app.services.pdf_service import generate_audit_pdf
     record = db.query(ScanRecordDB).filter(ScanRecordDB.id == scan_id).first()
     if not record:
@@ -241,7 +272,7 @@ def get_scan_pdf(scan_id: str, db: Session = Depends(get_db)):
 
 @router.get("/api/stats")
 @router.get("/api/dashboard/stats")
-def get_dashboard_stats(db: Session = Depends(get_db)):
+def get_dashboard_stats(user=Depends(require_current_user), db: Session = Depends(get_db)):
     """
     Aggregates compliance metrics for the React Native Dashboard screen & test suites.
     """

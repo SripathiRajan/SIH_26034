@@ -1,8 +1,9 @@
 import os
 import hashlib
-from datetime import datetime, timedelta
+import hmac
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from passlib.context import CryptContext
+import bcrypt
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -15,17 +16,22 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 
 
 def hash_password(plain: str) -> str:
-    salt = os.urandom(16).hex()
-    key = hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt.encode("utf-8"), 100000).hex()
-    return f"{salt}:{key}"
+    if len(plain) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(plain.encode("utf-8"), salt).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     try:
+        # Check bcrypt hash first
+        if hashed.startswith("$2b$") or hashed.startswith("$2a$") or hashed.startswith("$2y$"):
+            return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+        # Check legacy PBKDF2 hash "salt:hex" with timing-safe comparison
         if ":" in hashed:
             salt, stored_key = hashed.split(":", 1)
             key = hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt.encode("utf-8"), 100000).hex()
-            return key == stored_key
+            return hmac.compare_digest(key, stored_key)
         return False
     except Exception:
         return False
@@ -33,7 +39,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(data: dict) -> str:
     payload = data.copy()
-    payload["exp"] = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload["exp"] = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
