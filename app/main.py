@@ -52,12 +52,20 @@ def startup_event():
     logger.info("✓ PRAMAN v4 database initialized")
 
     def _warmup_models():
-        try:
-            from core.models import registry
-            registry.get_paddle_ocr()
-            logger.info("✓ Primary PaddleOCR engine pre-warmed and ready in memory")
-        except Exception as e:
-            logger.warning(f"Background model pre-warm note: {e}")
+        # Sequential preload of every OCR engine. Lazy first-use inside worker
+        # threads crashes natively on Windows (OpenMP/DLL init race), and
+        # preloading also removes the multi-second first-scan latency spike.
+        from core.models import registry
+        for name, getter in (
+            ("PaddleOCR (primary)", registry.get_paddle_ocr),
+            ("EasyOCR (tier 2)", registry.get_easyocr_reader),
+            ("SuryaOCR (tier 2)", registry.get_surya_detector),
+        ):
+            try:
+                getter()
+                logger.info(f"✓ {name} pre-warmed and ready in memory")
+            except Exception as e:
+                logger.warning(f"Background model pre-warm note ({name}): {e}")
 
     threading.Thread(target=_warmup_models, daemon=True).start()
 

@@ -2,7 +2,6 @@ import os
 import time
 import cv2
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List
 
 from core.image_utils import resize_for_ocr, enhance_image
@@ -29,7 +28,7 @@ def ensemble_scan(
     Stage 0.5: Perspective deskew + glare check
     Stage 1: PaddleOCR (Tier 1 — fast path)
               → conf >= 0.60 or valid detections without explicit ensemble request → SKIP TIER 2
-    Stage 2: EasyOCR + SuryaOCR in parallel (Tier 2 — deep ensemble/recovery)
+    Stage 2: EasyOCR + SuryaOCR sequentially (Tier 2 — deep ensemble/recovery)
     Stage 2.5: CLAHE enhance + PaddleOCR retry for residual missing fields
     Stage 3: Florence-2 VLM (Tier 3 — only if critical fields still missing AND requested)
     Stage 4: Geometric IoU spatial merge + reading order sort
@@ -86,20 +85,16 @@ def ensemble_scan(
 
         if not skip_tier2:
             # ── Stage 2: Tier 2 EasyOCR + SuryaOCR (targeted recovery) ──────
+            # Sequential on purpose: both engines are CPU-bound (OMP threads pinned to 1),
+            # and parallel first-use lazy imports crash natively on Windows (OpenMP/DLL race).
             logger.info("  Stage 2: Low confidence or missing fields — running Tier 2 engines")
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                futures = {
-                    executor.submit(run_easyocr, active_path): "EasyOCR",
-                    executor.submit(run_surya_ocr, active_path): "SuryaOCR",
-                }
-                for future in as_completed(futures):
-                    name = futures[future]
-                    try:
-                        res = future.result()
-                        logger.info(f"  ✓ {name}: {len(res)} regions")
-                        all_results.extend(res)
-                    except Exception as e:
-                        logger.error(f"  ✗ {name} failed: {e}")
+            for runner, name in ((run_easyocr, "EasyOCR"), (run_surya_ocr, "SuryaOCR")):
+                try:
+                    res = runner(active_path)
+                    logger.info(f"  ✓ {name}: {len(res)} regions")
+                    all_results.extend(res)
+                except Exception as e:
+                    logger.error(f"  ✗ {name} failed: {e}")
 
             # ── Stage 2.5: CLAHE retry for residual missing fields ────────────
             fields_s2, _, flap_s2 = extract_fields(all_results)
