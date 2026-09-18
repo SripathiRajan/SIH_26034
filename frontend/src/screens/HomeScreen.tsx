@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Platform, Modal, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Platform, Modal, Image, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Svg, { Path, Rect, Circle, Line } from 'react-native-svg';
 import DemoBanner from '../components/DemoBanner';
+import { useAuth } from '../context/AuthContext';
 
 interface Props {
   navigation: any;
@@ -102,6 +103,18 @@ function ChevronRightIcon({ size = 13, color = 'currentColor' }: { size?: number
 export default function HomeScreen({ navigation }: Props) {
   const { width } = useWindowDimensions();
   const isMobile = width < 760;
+  const { currentUser, logout } = useAuth();
+
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      `End the session for ${currentUser?.name || 'this officer'}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign Out', style: 'destructive', onPress: () => logout() },
+      ]
+    );
+  };
 
   // Toast state
   const [toastMessage, setToastMessage] = useState<string>('');
@@ -460,12 +473,20 @@ export default function HomeScreen({ navigation }: Props) {
             </View>
             <TouchableOpacity
               style={styles.avatar}
-              onPress={() => showToast('Officer 1234 · signed in')}
+              onPress={handleSignOut}
               activeOpacity={0.8}
               // @ts-ignore
               className="inspect-avatar"
             >
-              <Text style={styles.avatarText}>1234</Text>
+              <Text style={styles.avatarText}>
+                {(currentUser?.name || currentUser?.id || 'OFF')
+                  .trim()
+                  .split(/\s+/)
+                  .map((w) => w[0])
+                  .join('')
+                  .slice(0, 4)
+                  .toUpperCase()}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

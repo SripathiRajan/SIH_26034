@@ -18,6 +18,7 @@ import CustomInput from '../components/CustomInput';
 import PrimaryButton from '../components/PrimaryButton';
 import { pramanColor, pramanFont, radius, shadow } from '../theme/tokens';
 import { UserRole, OfficerUser } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface Props {
   onLogin?: (user: OfficerUser) => void;
@@ -43,6 +44,7 @@ function LockIcon({ color = pramanColor.mutedText }: { color?: string }) {
 }
 
 export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
+  const { login } = useAuth();
   const [selectedRole, setSelectedRole] = useState<UserRole>('officer');
   const [officerId, setOfficerId] = useState('');
   const [password, setPassword] = useState('');
@@ -83,28 +85,24 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
     if (!validateForm()) return;
 
     setIsLoading(true);
     setErrors({});
 
-    setTimeout(() => {
+    try {
+      // Real backend authentication — issues and persists a JWT.
+      // Role spoofing is impossible: the role comes from the server user record.
+      const res = await login(officerId.trim(), password);
       setIsLoading(false);
-
-      const user: OfficerUser = {
-        id: officerId.trim().toUpperCase() || 'OFF-2601',
-        name: 'Officer ' + (officerId.trim().toUpperCase() || '2601'),
-        role: selectedRole,
-        department: 'Department of Consumer Affairs',
-        zone: 'National Inspectorate',
-        badgeId: officerId.trim().toUpperCase() || 'OFF-2601',
-      };
-
-      if (onLogin) {
-        onLogin(user);
+      if (!res.success) {
+        setErrors({ form: res.error || 'Authentication failed' });
       }
-    }, 900);
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrors({ form: err?.message || 'Authentication failed' });
+    }
   };
 
   return (

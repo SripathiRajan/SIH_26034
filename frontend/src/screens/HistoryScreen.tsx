@@ -90,9 +90,17 @@ export default function HistoryScreen({ navigation }: Props) {
   const [liveScans, setLiveScans] = useState<any[]>(DEMO_MODE ? recentScans : []);
 
   useEffect(() => {
-    api.listScans().then((data) => {
-      if (data && data.length > 0) setLiveScans(data);
-    }).catch(() => {});
+    let cancelled = false;
+    const load = () => {
+      api.listScans().then((data) => {
+        if (!cancelled && data && data.length > 0) setLiveScans(data);
+      }).catch(() => {});
+    };
+    load();
+    // Retry once: the OCR backend may still be warming up on first mount,
+    // and listScans failures leave the list empty (no silent mock fallback).
+    const retry = setTimeout(load, 4000);
+    return () => { cancelled = true; clearTimeout(retry); };
   }, []);
   const { width } = useWindowDimensions();
   const isMobile = width < 768;

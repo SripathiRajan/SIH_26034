@@ -526,6 +526,40 @@ class ApiClient {
   }
 
   /**
+   * Register a new officer account. Role is always locked to "inspector"
+   * by the backend (admin/auditor must be seeded server-side).
+   */
+  public async register(
+    username: string,
+    email: string,
+    password: string,
+    fullName?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          email,
+          password,
+          full_name: fullName || username,
+        }),
+      });
+      if (res.status === 201) {
+        return { success: true };
+      }
+      const err = await res.json().catch(() => ({ detail: 'Registration failed' }));
+      const detail = Array.isArray(err.detail)
+        ? err.detail.map((e: any) => e?.msg || '').join(', ') || 'Registration failed'
+        : err.detail || 'Registration failed';
+      return { success: false, error: detail };
+    } catch {
+      return { success: false, error: 'Backend unreachable — cannot register in production mode' };
+    }
+  }
+
+  /**
    * Authenticate officer.
    */
   public async login(identifier: string, password: string): Promise<{ success: boolean; token?: string; user?: OfficerUser; error?: string }> {

@@ -38,3 +38,4 @@ node_modules/
 .zcode/
 
 
+.admin_credentials.txt

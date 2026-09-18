@@ -18,6 +18,8 @@ import CustomInput from '../components/CustomInput';
 import PrimaryButton from '../components/PrimaryButton';
 import { pramanColor, pramanFont, radius, shadow } from '../theme/tokens';
 import { UserRole, OfficerUser } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { api } from '../api/client';
 
 interface Props {
   onSignup?: (user: OfficerUser) => void;
@@ -61,6 +63,7 @@ function LockIcon({ color = pramanColor.mutedText }: { color?: string }) {
 }
 
 export default function SignupScreen({ onSignup, onNavigateToLogin }: Props) {
+  const { login } = useAuth();
   const [selectedRole, setSelectedRole] = useState<UserRole>('officer');
   const [fullName, setFullName] = useState('');
   const [officerId, setOfficerId] = useState('');
@@ -117,7 +120,7 @@ export default function SignupScreen({ onSignup, onNavigateToLogin }: Props) {
     if (!password.trim()) {
       newErrors.password = 'Password is required';
     } else if (password.trim().length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors.password = 'Password must be at least 8 characters';
     }
 
     if (!confirmPassword.trim()) {
@@ -130,27 +133,32 @@ export default function SignupScreen({ onSignup, onNavigateToLogin }: Props) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleCreateAccount = () => {
+  const handleCreateAccount = async () => {
     if (!validateForm()) return;
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      setIsLoading(false);
-
-      const newOfficer: OfficerUser = {
-        id: officerId.trim().toUpperCase() || 'OFF-NEW',
-        name: fullName.trim() || 'New Officer',
-        role: selectedRole,
-        department: 'Department of Consumer Affairs',
-        zone: 'Inspectorate Zone',
-        badgeId: officerId.trim().toUpperCase() || 'OFF-NEW',
-      };
-
-      if (onSignup) {
-        onSignup(newOfficer);
+    try {
+      // Real backend registration; the server locks the role to "inspector"
+      // regardless of the selected tab (admins are seeded server-side).
+      const username = (email.trim() || officerId.trim()).toLowerCase();
+      const reg = await api.register(username, email.trim(), password, fullName.trim());
+      if (!reg.success) {
+        setIsLoading(false);
+        setErrors({ confirmPassword: reg.error || 'Registration failed' });
+        return;
       }
-    }, 900);
+      // Auto-login after successful registration to obtain a JWT.
+      const res = await login(username, password);
+      setIsLoading(false);
+      if (!res.success) {
+        if (onNavigateToLogin) onNavigateToLogin();
+        return;
+      }
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrors({ confirmPassword: err?.message || 'Registration failed' });
+    }
   };
 
   return (
