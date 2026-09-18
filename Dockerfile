@@ -10,6 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Setup non-root user for Hugging Face Spaces & security
+RUN useradd -m -u 1000 user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
+
 WORKDIR /app
 
 # Install Python requirements
@@ -19,15 +24,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application source code
 COPY . .
 
-# Ensure storage directories exist
-RUN mkdir -p uploads .cache
+# Ensure storage directories exist with write permissions
+RUN mkdir -p uploads .cache && chown -R user:user /app
 
-EXPOSE 8000
+USER user
+
+EXPOSE 7860 8000
 
 ENV PYTHONUNBUFFERED=1
-ENV PORT=8000
+ENV PORT=7860
 
 # Single worker is required: scan sessions and rate limits live in per-process
 # memory (app/routers/scan_session.py SessionStore, slowapi), so multiple
 # workers would split session state across processes and break finalize/discard.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}"]

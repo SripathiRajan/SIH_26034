@@ -1,3 +1,12 @@
+---
+title: PRAMAN v4 Backend
+emoji: ⚖️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+---
+
 # PRAMAN v4 — Legal Metrology AI Inspection System
 
 > **Automated Inspection Platform** under the **Legal Metrology (Packaged Commodities) Rules, 2011** and **FSSAI (Labelling & Display) Regulations, 2020**.
