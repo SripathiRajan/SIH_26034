@@ -7,6 +7,7 @@ import DemoBanner from '../components/DemoBanner';
 import { DEMO_MODE } from '../api/config';
 import { recentScans } from '../data/mockData';
 
+
 interface Props {
   navigation: any;
 }
@@ -165,7 +166,7 @@ export default function HistoryScreen({ navigation }: Props) {
     }
 
     return results;
-  }, [filter, searchQuery, dateFilter, sortBy]);
+  }, [liveScans, filter, searchQuery, dateFilter, sortBy]);
 
   return (
     <View style={{ flex: 1 }}>

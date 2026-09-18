@@ -349,7 +349,7 @@ class ApiClient {
   public async listScans(params?: { brand?: string; status?: string; page?: number }): Promise<ScanRecord[]> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       const queryParams = new URLSearchParams();
       if (params?.status && params.status !== 'all') queryParams.append('status', params.status);
       if (params?.page) queryParams.append('page', String(params.page));
@@ -360,6 +360,8 @@ class ApiClient {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
+
+      console.warn('[ApiClient] listScans status', res.status);
 
       if (res.ok) {
         const data = await res.json();
@@ -373,7 +375,7 @@ class ApiClient {
         }
       }
     } catch (err) {
-      console.warn('[ApiClient] listScans failed:', err);
+      console.warn('[ApiClient] listScans error:', err);
     }
 
     if (DEMO_MODE) {

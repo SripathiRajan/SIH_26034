@@ -193,6 +193,9 @@ export default function ChatScreen() {
     api
       .askAssistant(text)
       .then(({ answer, sources, llmGenerated }) => {
+        const uniqueSources = sources
+          ? Array.from(new Set(sources.map((s) => (typeof s === 'string' ? s.trim() : String(s))).filter(Boolean)))
+          : undefined;
         setMessages((prev) => [
           ...prev,
           {
@@ -200,7 +203,7 @@ export default function ChatScreen() {
             sender: 'assistant',
             text: answer,
             timestamp: replyTime,
-            citations: sources,
+            citations: uniqueSources,
             llmGenerated,
           },
         ]);
@@ -276,6 +279,9 @@ export default function ChatScreen() {
           {messages.map((msg) => {
             const isUser = msg.sender === 'user';
             const isCopied = copiedId === msg.id;
+            const uniqueCitations = msg.citations
+              ? Array.from(new Set(msg.citations.map((c) => (typeof c === 'string' ? c.trim() : String(c))).filter(Boolean)))
+              : [];
 
             return (
               <View
@@ -306,9 +312,9 @@ export default function ChatScreen() {
                   </View>
 
                   {/* Statutory citations from the RAG knowledge base */}
-                  {!isUser && msg.citations && msg.citations.length > 0 && (
+                  {!isUser && uniqueCitations.length > 0 && (
                     <View style={styles.citationRow}>
-                      {msg.citations.slice(0, 3).map((cite, ci) => (
+                      {uniqueCitations.slice(0, 3).map((cite, ci) => (
                         <View key={`${msg.id}-cite-${ci}`} style={styles.citationChip}>
                           <Text style={styles.citationText} numberOfLines={1}>
                             {cite}

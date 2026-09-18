@@ -197,6 +197,22 @@ export default function DashboardScreen() {
     }
   }, []);
 
+  // ── Hero computed values (derived from real API stats) ──────────────────
+  const heroTotal = stats.totalScans || 0;
+  const heroCompliant = stats.compliantCount || 0;
+  // warning = total − compliant − nonCompliant (backend rolls needs_review into nonCompliant)
+  const heroNonCompliant = stats.nonCompliantCount || 0;
+  const heroReview = Math.max(0, heroTotal - heroCompliant - heroNonCompliant);
+  const heroCompliantPct = heroTotal > 0 ? Math.round((heroCompliant / heroTotal) * 100) : 0;
+  const heroReviewPct = heroTotal > 0 ? Math.round((heroReview / heroTotal) * 100) : 0;
+  // Give all remainder to non-compliant so percentages always sum to 100
+  const heroNonCompliantPct = heroTotal > 0 ? Math.max(0, 100 - heroCompliantPct - heroReviewPct) : 0;
+
+  const zoneCount = (stats.zoneBreakdown || []).length;
+  const heroSubtitleZone = zoneCount > 0
+    ? `Real-time compliance telemetry, field audit risks, and rule violation frequencies across ${zoneCount} enforcement zone${zoneCount !== 1 ? 's' : ''}.`
+    : 'Real-time compliance telemetry, field audit risks, and rule violation frequencies.';
+
   return (
     <View style={{ flex: 1 }}>
       <DemoBanner />
@@ -213,7 +229,7 @@ export default function DashboardScreen() {
             <Text style={styles.liveBadgeText}>Live</Text>
           </View>
           <View style={styles.zoneAvatar}>
-            <Text style={styles.zoneAvatarText}>5Z</Text>
+            <Text style={styles.zoneAvatarText}>{zoneCount > 0 ? `${zoneCount}Z` : '—'}</Text>
           </View>
         </View>
       </View>
@@ -225,11 +241,11 @@ export default function DashboardScreen() {
             <Text style={styles.rulesPillText}>Legal Metrology (PC) Rules, 2011</Text>
           </View>
           <Text style={[styles.heroHeadline, isMobile && styles.heroHeadlineMobile]}>
-            1,247 scans this week.{'\n'}Here's what's holding up.
+            {heroTotal > 0
+              ? `${heroTotal.toLocaleString('en-IN')} scans total.\nHere's what's holding up.`
+              : `No scans yet.\nStart your first inspection.`}
           </Text>
-          <Text style={styles.heroSubtitle}>
-            Real-time compliance telemetry, field audit risks, and rule violation frequencies across 5 enforcement zones.
-          </Text>
+          <Text style={styles.heroSubtitle}>{heroSubtitleZone}</Text>
 
           <View style={styles.heroCtaGroup}>
             <TouchableOpacity style={styles.violetBtn} activeOpacity={0.85}>
@@ -243,27 +259,34 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Hero Right: Translucent Donut Card */}
-        <View style={styles.heroDonutCard}>
-          <Text style={styles.donutCardTitle}>This week's breakdown</Text>
-          <View style={styles.donutRow}>
-            <DonutChart compliant={83} review={11} nonCompliant={6} />
-            <View style={styles.donutLegendCol}>
-              <View style={styles.donutLegendItem}>
-                <View style={[styles.donutDot, { backgroundColor: '#17B897' }]} />
-                <Text style={styles.donutLegendText}>83% Compliant</Text>
-              </View>
-              <View style={styles.donutLegendItem}>
-                <View style={[styles.donutDot, { backgroundColor: '#F5A623' }]} />
-                <Text style={styles.donutLegendText}>11% Review</Text>
-              </View>
-              <View style={styles.donutLegendItem}>
-                <View style={[styles.donutDot, { backgroundColor: '#F0544B' }]} />
-                <Text style={styles.donutLegendText}>6% Non-Compliant</Text>
+        {/* Hero Right: Translucent Donut Card (hidden when no data) */}
+        {heroTotal > 0 ? (
+          <View style={styles.heroDonutCard}>
+            <Text style={styles.donutCardTitle}>Overall breakdown</Text>
+            <View style={styles.donutRow}>
+              <DonutChart compliant={heroCompliantPct} review={heroReviewPct} nonCompliant={heroNonCompliantPct} />
+              <View style={styles.donutLegendCol}>
+                <View style={styles.donutLegendItem}>
+                  <View style={[styles.donutDot, { backgroundColor: '#17B897' }]} />
+                  <Text style={styles.donutLegendText}>{heroCompliantPct}% Compliant</Text>
+                </View>
+                <View style={styles.donutLegendItem}>
+                  <View style={[styles.donutDot, { backgroundColor: '#F5A623' }]} />
+                  <Text style={styles.donutLegendText}>{heroReviewPct}% Review</Text>
+                </View>
+                <View style={styles.donutLegendItem}>
+                  <View style={[styles.donutDot, { backgroundColor: '#F0544B' }]} />
+                  <Text style={styles.donutLegendText}>{heroNonCompliantPct}% Non-Compliant</Text>
+                </View>
               </View>
             </View>
           </View>
-        </View>
+        ) : (
+          <View style={[styles.heroDonutCard, { justifyContent: 'center', minHeight: 120 }]}>
+            <Text style={[styles.donutCardTitle, { textAlign: 'center', marginBottom: 0 }]}>No scans yet</Text>
+            <Text style={{ fontFamily: Platform.OS === 'web' ? "'Plus Jakarta Sans', sans-serif" : 'System', fontSize: 11, color: '#6B7280', textAlign: 'center', marginTop: 6 }}>Run your first inspection to{`\n`}see the compliance breakdown.</Text>
+          </View>
+        )}
       </View>
 
       {/* 3. STAT CARDS GRID */}
@@ -276,11 +299,7 @@ export default function DashboardScreen() {
           <Text style={styles.statLabel}>Total Scans Processed</Text>
           <Text style={styles.statVal}>{stats.totalScans.toLocaleString('en-IN')}</Text>
           <View style={styles.statFooter}>
-            <View style={[styles.deltaBadge, { backgroundColor: '#DFF6EF' }]}>
-              <TrendingUpIcon size={11} color="#17B897" />
-              <Text style={[styles.deltaText, { color: '#17B897' }]}>+18.5%</Text>
-            </View>
-            <Text style={styles.statNote}>Across 5 zones</Text>
+            <Text style={styles.statNote}>{zoneCount > 0 ? `Across ${zoneCount} zone${zoneCount !== 1 ? 's' : ''}` : 'All zones'}</Text>
           </View>
         </View>
 
@@ -292,10 +311,6 @@ export default function DashboardScreen() {
           <Text style={styles.statLabel}>Overall Violation Rate</Text>
           <Text style={[styles.statVal, { color: '#F0544B' }]}>{stats.violationRate}%</Text>
           <View style={styles.statFooter}>
-            <View style={[styles.deltaBadge, { backgroundColor: '#DFF6EF' }]}>
-              <TrendingUpIcon size={11} color="#17B897" />
-              <Text style={[styles.deltaText, { color: '#17B897' }]}>-1.4%</Text>
-            </View>
             <Text style={styles.statNote}>Target ≤ 6.0%</Text>
           </View>
         </View>
@@ -308,10 +323,6 @@ export default function DashboardScreen() {
           <Text style={styles.statLabel}>Fully Compliant</Text>
           <Text style={[styles.statVal, { color: '#17B897' }]}>{stats.compliantCount?.toLocaleString('en-IN') ?? '—'}</Text>
           <View style={styles.statFooter}>
-            <View style={[styles.deltaBadge, { backgroundColor: '#DFF6EF' }]}>
-              <TrendingUpIcon size={11} color="#17B897" />
-              <Text style={[styles.deltaText, { color: '#17B897' }]}>+22.0%</Text>
-            </View>
             <Text style={styles.statNote}>Passed checks</Text>
           </View>
         </View>
@@ -324,10 +335,6 @@ export default function DashboardScreen() {
           <Text style={styles.statLabel}>Non-Compliant</Text>
           <Text style={[styles.statVal, { color: '#F0544B' }]}>{stats.nonCompliantCount?.toLocaleString('en-IN') ?? '—'}</Text>
           <View style={styles.statFooter}>
-            <View style={[styles.deltaBadge, { backgroundColor: '#FCE7E6' }]}>
-              <TrendingDownIcon size={11} color="#F0544B" />
-              <Text style={[styles.deltaText, { color: '#F0544B' }]}>-8.3%</Text>
-            </View>
             <Text style={styles.statNote}>Violations flagged</Text>
           </View>
         </View>
@@ -340,10 +347,6 @@ export default function DashboardScreen() {
           <Text style={styles.statLabel}>Authenticity Flags</Text>
           <Text style={[styles.statVal, { color: '#F5A623' }]}>{stats.authenticityFlags}</Text>
           <View style={styles.statFooter}>
-            <View style={[styles.deltaBadge, { backgroundColor: '#FCE7E6' }]}>
-              <TrendingDownIcon size={11} color="#F0544B" />
-              <Text style={[styles.deltaText, { color: '#F0544B' }]}>+2 new</Text>
-            </View>
             <Text style={styles.statNote}>Counterfeit alerts</Text>
           </View>
         </View>
