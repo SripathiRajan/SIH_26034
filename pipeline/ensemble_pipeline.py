@@ -5,7 +5,7 @@ import numpy as np
 from typing import Dict, Any, List
 
 from core.image_utils import resize_for_ocr, enhance_image
-from core.config import BASE_DIR, UPLOAD_DIR
+from core.config import UPLOAD_DIR
 from core.logger import logger
 from ocr.paddle_engine import run_paddle_ocr
 from ocr.easyocr_engine import run_easyocr
@@ -36,7 +36,7 @@ def ensemble_scan(
     """
     from core.image_utils import deskew_perspective, check_glare
     from pipeline.spatial_merger import merge_and_sort
-    from core.config import OCR_CONFIDENCE_THRESHOLD, IOU_MERGE_THRESHOLD
+    from core.config import IOU_MERGE_THRESHOLD
 
     logger.info(f"Starting OCR scan on: {os.path.basename(image_path)} (use_ensemble={use_ensemble})")
     t_start = time.time()

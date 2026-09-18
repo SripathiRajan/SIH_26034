@@ -375,7 +375,7 @@ class ApiClient {
         }
       }
     } catch (err) {
-      console.warn('[ApiClient] listScans error:', err);
+      console.warn('[ApiClient] listScans failed:', err);
     }
 
     if (DEMO_MODE) {

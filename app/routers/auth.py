@@ -4,7 +4,6 @@ Supports OAuth2 password flows and JSON credentials for both CB1 and CB2 clients
 """
 
 import uuid
-from datetime import datetime
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm

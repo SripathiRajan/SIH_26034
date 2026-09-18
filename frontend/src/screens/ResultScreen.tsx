@@ -13,7 +13,7 @@ import {
   Linking,
   ActivityIndicator,
 } from 'react-native';
-import Svg, { Path, Circle, Line, Rect, Polygon } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import GlassCard from '../components/GlassCard';
 import StatusPill from '../components/StatusPill';
 import DemoBanner from '../components/DemoBanner';
@@ -24,7 +24,6 @@ import { api } from '../api/client';
 import { exportReportAsPdf } from '../services/reportExporter';
 
 import DottedBackground from '../components/DottedBackground';
-import LogoHeader from '../components/LogoHeader';
 
 interface Props {
   navigation: any;
@@ -47,18 +46,6 @@ function PdfIcon({ col = '#FFFFFF', size = 15 }: { col?: string; size?: number }
       <Path d="M14 2v6h6" />
       <Path d="M9 13h6" />
       <Path d="M9 17h4" />
-    </Svg>
-  );
-}
-
-function ShareIcon({ col = '#FFFFFF', size = 15 }: { col?: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx="18" cy="5" r="3" />
-      <Circle cx="6" cy="12" r="3" />
-      <Circle cx="18" cy="19" r="3" />
-      <Line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-      <Line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
     </Svg>
   );
 }

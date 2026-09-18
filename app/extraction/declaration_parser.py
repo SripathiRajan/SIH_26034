@@ -7,7 +7,7 @@ Computes field-level confidence and flags low-confidence (<0.60) extractions for
 """
 
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from ..ocr.engine_base import TextPolygon
 from ..config import settings
 

@@ -7,24 +7,6 @@ import { DEMO_MODE } from '../api/config';
 import { dashboardStats } from '../data/mockData';
 
 /* SVG Vector Icons */
-function TrendingUpIcon({ size = 13, color = '#17B897' }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M23 6l-9.5 9.5-5-5L1 18" />
-      <Path d="M17 6h6v6" />
-    </Svg>
-  );
-}
-
-function TrendingDownIcon({ size = 13, color = '#F0544B' }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M23 18l-9.5-9.5-5 5L1 6" />
-      <Path d="M17 18h6v-6" />
-    </Svg>
-  );
-}
-
 function ScanIcon({ size = 16, color = '#6C5CE7' }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -837,19 +819,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  deltaBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  deltaText: {
-    fontFamily: Platform.OS === 'web' ? "'Plus Jakarta Sans', sans-serif" : 'System',
-    fontSize: 10.5,
-    fontWeight: '700',
   },
   statNote: {
     fontFamily: Platform.OS === 'web' ? "'Plus Jakarta Sans', sans-serif" : 'System',

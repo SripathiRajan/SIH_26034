@@ -6,7 +6,7 @@ rule explanations, and machine-readable violation reasons.
 """
 import json
 import os
-from typing import Dict, Any
+from typing import Dict
 
 _RULES_PATH = os.path.join(os.path.dirname(__file__), "rules.json")
 

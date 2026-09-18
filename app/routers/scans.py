@@ -4,23 +4,21 @@ Coordinates scan inspection, history retrieval, PDF generation, and dashboard st
 """
 
 import os
-import shutil
 import uuid
-import time
 import json
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Dict, Any
+from datetime import timezone, timedelta
+from typing import Optional, Dict, Any
 from collections import Counter
 
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Query, status, Request
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 
-from core.config import UPLOAD_DIR, SCAN_HISTORY_PAGE_SIZE, BASE_DIR
+from core.config import UPLOAD_DIR, SCAN_HISTORY_PAGE_SIZE
 from core.logger import logger
 from core.database import get_db
 from core.db_models import ScanRecordDB, ProductMasterDB

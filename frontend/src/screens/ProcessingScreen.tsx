@@ -8,7 +8,6 @@ import { color, font, space, radius } from '../theme/tokens';
 import { OCR_PIPELINE_STAGES, simulateScanPipeline } from '../services/scanSimulator';
 
 import DottedBackground from '../components/DottedBackground';
-import LogoHeader from '../components/LogoHeader';
 
 interface Props {
   navigation: any;

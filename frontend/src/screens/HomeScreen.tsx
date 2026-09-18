@@ -29,14 +29,6 @@ function CameraIcon({ size = 16, color = '#062E28' }: { size?: number; color?: s
   );
 }
 
-function ZapIcon({ size = 15, color = '#FFFFFF' }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-    </Svg>
-  );
-}
-
 function LayersIcon({ size = 16, color = '#FFFFFF' }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
