@@ -1,0 +1,31 @@
+# PRAMAN v4 — Render Blueprint (backend)
+# Deploy: Render Dashboard -> New -> Blueprint -> connect SripathiRajan/SIH_26034
+# The frontend deploys separately on Vercel (see frontend/vercel.json + DEPLOY.md).
+
+services:
+  - type: web
+    name: praman-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    # Starter (2 GB RAM): the OCR stack (torch + paddle + easyocr + surya)
+    # needs ~1.5 GB+ resident. The free plan (512 MB) will be OOM-killed
+    # during model warm-up — do not downgrade unless you slim requirements.
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+      - key: PRAMAN_SECRET_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # Set to your Vercel URL after the first frontend deploy, e.g.
+      # https://praman-<vercel-suffix>.vercel.app — comma-separate extra origins.
+      - key: CORS_ORIGINS
+        sync: false

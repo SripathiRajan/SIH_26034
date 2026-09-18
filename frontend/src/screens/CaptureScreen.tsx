@@ -237,6 +237,12 @@ export default function CaptureScreen({ navigation }: Props) {
 
     let capturedUri = '';
     if (Platform.OS === 'web' && videoRef.current) {
+      // Guard: ensure the stream is actually attached and video dimensions are ready
+      // (fixes 100ms race where srcObject may not be set yet after getUserMedia)
+      if (!videoRef.current.srcObject || videoRef.current.videoWidth === 0) {
+        Alert.alert('Camera Not Ready', 'Please wait a moment for the camera preview to load, then try again.');
+        return;
+      }
       try {
         const canvas = document.createElement('canvas');
         canvas.width = videoRef.current.videoWidth || 640;
@@ -249,6 +255,7 @@ export default function CaptureScreen({ navigation }: Props) {
       } catch (e) {
         console.warn('Canvas frame capture fallback', e);
       }
+
     } else if (Platform.OS !== 'web' && cameraRef.current) {
       // Native: full-resolution still from the expo-camera preview
       try {

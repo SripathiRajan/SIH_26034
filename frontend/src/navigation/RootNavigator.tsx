@@ -197,7 +197,7 @@ export default function RootNavigator() {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
   const { currentUser, setUser, isLoading } = useAuth();
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('signup');
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
   if (isLoading) {
     return (
