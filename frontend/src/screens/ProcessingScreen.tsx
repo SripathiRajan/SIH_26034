@@ -96,11 +96,34 @@ export default function ProcessingScreen({ navigation, route }: Props) {
         clearInterval(stageTimer);
       };
     } else {
-      // Legacy single-image flow
+      // Single-image flow
+      setExtractedLogs([
+        'Initializing cascaded OCR engines...',
+        'Running primary PaddleOCR detection on package label...',
+      ]);
+      setCurrentStageIndex(1);
+
+      // Step through progress stages with live feedback while awaiting backend CPU inference
+      const stageTimer = setInterval(() => {
+        if (isMounted) {
+          setCurrentStageIndex((prev) => {
+            if (prev < OCR_PIPELINE_STAGES.length - 1) {
+              const next = prev + 1;
+              const stageName = OCR_PIPELINE_STAGES[next]?.name || 'Verifying declarations';
+              setExtractedLogs((logs) => [...logs, `Running ${stageName}...`]);
+              return next;
+            }
+            return prev;
+          });
+        }
+      }, 7000);
+
       api.analyzeImage(imageUri || '', (stageIdx) => {
         if (isMounted) setCurrentStageIndex(stageIdx);
       }).then((resultScan) => {
+        clearInterval(stageTimer);
         if (isMounted) {
+          setCurrentStageIndex(OCR_PIPELINE_STAGES.length);
           if (resultScan.fields && resultScan.fields.length > 0) {
             resultScan.fields.forEach((f) => {
               setExtractedLogs((prev) => [...prev, "Verified " + f.label + ": " + (f.extractedValue || f.extractedText || "DETECTED") + " [" + f.status.toUpperCase() + "]"]);
@@ -111,6 +134,7 @@ export default function ProcessingScreen({ navigation, route }: Props) {
           }, 600);
         }
       }).catch((err: any) => {
+        clearInterval(stageTimer);
         if (DEMO_MODE) {
           simulateScanPipeline(
             imageUri || '',
@@ -136,6 +160,7 @@ export default function ProcessingScreen({ navigation, route }: Props) {
 
       return () => {
         isMounted = false;
+        clearInterval(stageTimer);
       };
     }
   }, []);

@@ -18,6 +18,7 @@ const AuthContext = createContext<AuthContextType>({
   token: null,
   isLoading: true,
   login: async () => ({ success: false }),
+  loginDemo: async () => {},
   logout: async () => {},
   setUser: () => {},
 });

@@ -29,7 +29,7 @@ const getBaseUrl = (): string => {
 
 export const API_CONFIG = {
   BASE_URL: getBaseUrl(),
-  TIMEOUT_MS: 15000,
+  TIMEOUT_MS: 120000,
   ENDPOINTS: {
     HEALTH: '/health',
     SCAN: '/api/scan',

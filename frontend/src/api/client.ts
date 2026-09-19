@@ -77,7 +77,8 @@ class ApiClient {
   ): Promise<ScanRecord> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT_MS || 30000);
+      const timeoutMs = API_CONFIG.TIMEOUT_MS || 120000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       const formData = new FormData();
       if (Platform.OS === 'web') {
@@ -151,6 +152,9 @@ class ApiClient {
       }
     } catch (err: any) {
       if (err instanceof ApiError) throw err;
+      if (err.name === 'AbortError') {
+        throw new ApiError('TIMEOUT', 'Image analysis timed out after 120s. Processing complex multi-engine OCR on CPU took too long.');
+      }
       if (DEMO_MODE) {
         console.warn('[ApiClient] Backend scan call failed, falling back to simulator (demo mode):', err);
         return simulateScanPipeline(imageUri, onProgress);
@@ -283,7 +287,7 @@ class ApiClient {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
       const endpoint = typeof API_CONFIG.ENDPOINTS.FINALIZE_SESSION === 'function'
         ? API_CONFIG.ENDPOINTS.FINALIZE_SESSION(sessionId)
@@ -316,7 +320,7 @@ class ApiClient {
     } catch (err: any) {
       if (err instanceof ApiError) throw err;
       if (err.name === 'AbortError') {
-        throw new ApiError('TIMEOUT', 'Finalize request timed out after 30s');
+        throw new ApiError('TIMEOUT', 'Finalize request timed out after 60s');
       }
       throw new ApiError('BACKEND_UNREACHABLE', `Cannot finalize session: ${err?.message || 'Server offline'}`);
     }
