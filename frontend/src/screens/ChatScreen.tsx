@@ -238,7 +238,7 @@ export default function ChatScreen() {
   const isInputEmpty = input.trim().length === 0;
 
   return (
-    <View style={styles.pageWrap}>
+    <View style={[styles.pageWrap, isMobile && styles.pageWrapMobile]}>
       <DemoBanner />
       <View style={[styles.cardContainer, isMobile && styles.cardContainerMobile]}>
         {/* Header Card */}
@@ -288,6 +288,7 @@ export default function ChatScreen() {
                 key={msg.id}
                 style={[
                   styles.msgRow,
+                  isMobile && styles.msgRowMobile,
                   isUser ? styles.msgRowUser : styles.msgRowAssistant,
                 ]}
               >
@@ -377,7 +378,7 @@ export default function ChatScreen() {
 
         {/* Composer Input Bar */}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.composerBar}>
+          <View style={[styles.composerBar, isMobile && styles.composerBarMobile]}>
             <TextInput
               style={styles.composerInput}
               placeholder="Type your question here…"
@@ -414,6 +415,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Platform.OS === 'web' ? 16 : 0,
   },
+  pageWrapMobile: {
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
   cardContainer: {
     maxWidth: 820,
     width: '100%',
@@ -436,6 +441,9 @@ const styles = StyleSheet.create({
     maxHeight: '100%',
     borderRadius: 0,
     borderWidth: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+    flex: 1,
   },
 
   /* Header Card */
@@ -513,6 +521,9 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     maxWidth: '78%',
     flexDirection: 'row',
+  },
+  msgRowMobile: {
+    maxWidth: '92%',
   },
   msgRowAssistant: {
     alignSelf: 'flex-start',
@@ -647,6 +658,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  composerBarMobile: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   composerInput: {
     flex: 1,

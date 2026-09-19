@@ -8,7 +8,8 @@ MANDATORY_FIELDS = {
     "net_quantity": {
         "label": "Net Quantity",
         "pattern": re.compile(
-            r"(?:net\s*(?:quantity|qty|wt\.?|weight)?|weight|qty)\s*[:\-]?\s*([\d.,]+)\s*(g|gm|gms|g\.|kg|ml|l|ltr|litre|litres|m|cm|mm|oz|lb|count|units?|tablets?|capsules?|n|u)\b",
+            r"(?:(?:net\s*(?:quantity|qty|wt\.?|weight)?|weight|qty)\s*[:\-]?\s*(\d+[.,\d]*)\s*(g|gm|gms|g\.|kg|ml|l|ltr|litre|litres|m|cm|mm|oz|lb|count|units?|tablets?|capsules?|n|u)\b|"
+            r"(?:net\s*(?:quantity|qty|wt\.?|weight)?)\s*[:\-]?\s*([^\n\r]{1,30}?)\s*(\d+[.,\d]*)\s*(g|gm|gms|g\.|kg|ml|l|ltr|litre|litres)\b)",
             re.IGNORECASE
         ),
         "rule": "LM Rule §6(1)(c) — Net quantity mandatory in standard metric units"
@@ -17,7 +18,7 @@ MANDATORY_FIELDS = {
         "label": "Maximum Retail Price (MRP)",
         "pattern": re.compile(
             r"(?:maximum\s+retail\s+price|mrp|m\.r\.p\.?)\s*(?:\(incl\.?\s*of\s*all\s*taxes?\))?"
-            r"[ \t\:\-\.]*(?:rs\.?|₹|\?|inr)?[ \t\:\-\.]*([\d,]+\.?\d{1,2}|[\d,]+)|(?:rs\.?|₹)[ \t]*([\d,]+\.?\d*)",
+            r"[ \t\:\-\.]*(?:rs\.?|₹|\?|inr)?[ \t\:\-\.]*([\d,]+\.?\d{1,2}|[\d,]+)|(?:\b(?:rs\.?|inr)|₹)[ \t]*([\d,]+\.?\d{1,2}|[\d,]+)",
             re.IGNORECASE
         ),
         "rule": "LM Rule §6(1)(e) — MRP inclusive of all taxes"
@@ -25,7 +26,7 @@ MANDATORY_FIELDS = {
     "manufacturer": {
         "label": "Manufacturer / Packer Name & Address",
         "pattern": re.compile(
-            r"(?:manufactured(?:\s*&\s*marketed)?|marketed|packed|mfg|mfd)\s+by\s+(.+?)(?:\n|lic|fssai|$)",
+            r"(?:manufactured(?:\s*&\s*marketed)?|marketed|packed|mfg|mfd)\s+by\s*[:\-]?\s*(.+?)(?:\n|lic|fssai|$)",
             re.IGNORECASE
         ),
         "rule": "LM Rule §6(1)(a) — Name and address of manufacturer/packer/importer"
@@ -43,7 +44,8 @@ MANDATORY_FIELDS = {
         "label": "Use By / Best Before / Expiry",
         "pattern": re.compile(
             r"(?:use\s*by|best\s*before|expiry|exp\.?|expires?|bb\.?)[ \t\:\-]*"
-            r"([a-z0-9]{2,}[\s\/\-]\d{2,4}|\d{1,2}[\/-]\d{2,4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\w+\/\d{2,4}|\d+\s+months)",
+            r"([a-z0-9]{2,}[\s\/\-]\d{2,4}|\d{1,2}[\/-]\d{2,4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\w+\/\d{2,4}|"
+            r"(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|eighteen|twenty\s*four|\d+)\s*(?:months?|days?|weeks?|years?)(?:\s+(?:from|of)\s+(?:pkg|mfg|packing|packaging|packging|manufacture|date))?))",
             re.IGNORECASE
         ),
         "rule": "LM Rule §6(1)(da) — Best before / use by date"

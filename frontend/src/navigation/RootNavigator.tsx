@@ -127,6 +127,7 @@ function MainTabNavigator() {
           width: '100%',
           borderTopLeftRadius: isMobile ? 0 : 16,
           borderTopRightRadius: isMobile ? 0 : 16,
+          zIndex: 100,
         },
         tabBarItemStyle: {
           flexDirection: 'column',

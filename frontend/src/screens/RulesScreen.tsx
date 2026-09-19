@@ -231,6 +231,7 @@ const styles = StyleSheet.create({
   },
   mobileContent: {
     padding: 16,
+    paddingBottom: 96,
   },
 
   /* Header Banner */

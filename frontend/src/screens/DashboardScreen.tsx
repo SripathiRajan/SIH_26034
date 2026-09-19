@@ -218,7 +218,7 @@ export default function DashboardScreen() {
 
       {/* 2. HERO SECTION */}
       <View style={[styles.heroPanel, isMobile && styles.heroPanelMobile]}>
-        <View style={styles.heroLeft}>
+        <View style={[styles.heroLeft, isMobile ? styles.heroLeftMobile : styles.heroLeftDesktop]}>
           <View style={styles.rulesPill}>
             <Text style={styles.rulesPillText}>Legal Metrology (PC) Rules, 2011</Text>
           </View>
@@ -243,7 +243,7 @@ export default function DashboardScreen() {
 
         {/* Hero Right: Translucent Donut Card (hidden when no data) */}
         {heroTotal > 0 ? (
-          <View style={styles.heroDonutCard}>
+          <View style={[styles.heroDonutCard, isMobile && styles.heroDonutCardMobile]}>
             <Text style={styles.donutCardTitle}>Overall breakdown</Text>
             <View style={styles.donutRow}>
               <DonutChart compliant={heroCompliantPct} review={heroReviewPct} nonCompliant={heroNonCompliantPct} />
@@ -264,7 +264,7 @@ export default function DashboardScreen() {
             </View>
           </View>
         ) : (
-          <View style={[styles.heroDonutCard, { justifyContent: 'center', minHeight: 120 }]}>
+          <View style={[styles.heroDonutCard, isMobile && styles.heroDonutCardMobile, { justifyContent: 'center', minHeight: 120 }]}>
             <Text style={[styles.donutCardTitle, { textAlign: 'center', marginBottom: 0 }]}>No scans yet</Text>
             <Text style={{ fontFamily: Platform.OS === 'web' ? "'Plus Jakarta Sans', sans-serif" : 'System', fontSize: 11, color: '#6B7280', textAlign: 'center', marginTop: 6 }}>Run your first inspection to{`\n`}see the compliance breakdown.</Text>
           </View>
@@ -274,7 +274,7 @@ export default function DashboardScreen() {
       {/* 3. STAT CARDS GRID */}
       <View style={[styles.statsGrid, isMobile && styles.statsGridMobile]}>
         {/* Card 1: Total Scans */}
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, isMobile ? styles.statCardMobile : styles.statCardDesktop]}>
           <View style={[styles.iconChip, { backgroundColor: '#ECE9FC' }]}>
             <ScanIcon size={16} color="#6C5CE7" />
           </View>
@@ -286,7 +286,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* Card 2: Violation Rate */}
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, isMobile ? styles.statCardMobile : styles.statCardDesktop]}>
           <View style={[styles.iconChip, { backgroundColor: '#FCE7E6' }]}>
             <AlertTriangleIcon size={16} color="#F0544B" />
           </View>
@@ -298,7 +298,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* Card 3: Fully Compliant */}
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, isMobile ? styles.statCardMobile : styles.statCardDesktop]}>
           <View style={[styles.iconChip, { backgroundColor: '#DFF6EF' }]}>
             <CheckCircleIcon size={16} color="#17B897" />
           </View>
@@ -310,7 +310,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* Card 4: Non-Compliant */}
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, isMobile ? styles.statCardMobile : styles.statCardDesktop]}>
           <View style={[styles.iconChip, { backgroundColor: '#FCE7E6' }]}>
             <AlertTriangleIcon size={16} color="#F0544B" />
           </View>
@@ -322,7 +322,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* Card 5: Authenticity Flags */}
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, isMobile ? styles.statCardMobile : styles.statCardDesktop]}>
           <View style={[styles.iconChip, { backgroundColor: '#FDF1DD' }]}>
             <ShieldAlertIcon size={16} color="#F5A623" />
           </View>
@@ -501,9 +501,9 @@ export default function DashboardScreen() {
       )}
 
       {/* 5. BOTTOM LISTS GRID */}
-      <View style={[styles.bottomListsGrid, isMobile && { flexDirection: 'column' }]}>
+      <View style={[styles.bottomListsGrid, isMobile && styles.bottomListsGridMobile]}>
         {/* Most Common Rule Breaches */}
-        <View style={{ flex: 1 }}>
+        <View style={[styles.bottomListCol, isMobile ? styles.bottomListColMobile : styles.bottomListColDesktop]}>
           <View style={styles.listCard}>
             <View style={styles.chartCardHeader}>
               <Text style={styles.chartCardTitle}>Most Common Rule Breaches</Text>
@@ -530,7 +530,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* Brands Requiring Field Audit */}
-        <View style={{ flex: 1 }}>
+        <View style={[styles.bottomListCol, isMobile ? styles.bottomListColMobile : styles.bottomListColDesktop]}>
           <View style={styles.listCard}>
             <View style={styles.chartCardHeader}>
               <Text style={styles.chartCardTitle}>Brands Requiring Field Audit</Text>
@@ -541,7 +541,7 @@ export default function DashboardScreen() {
                 <View style={styles.rankBadge}>
                   <Text style={styles.rankBadgeText}>{i + 1}</Text>
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
                   <Text style={styles.brandName}>{item.brand}</Text>
                   <Text style={styles.brandCategory}>FMCG & Packaged Commodities</Text>
                 </View>
@@ -572,6 +572,7 @@ const styles = StyleSheet.create({
   },
   mobileContent: {
     padding: 16,
+    paddingBottom: 96,
   },
 
   /* 1. Top Bar */
@@ -656,7 +657,12 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   heroLeft: {
+  },
+  heroLeftDesktop: {
     flex: 1,
+  },
+  heroLeftMobile: {
+    width: '100%',
   },
   rulesPill: {
     alignSelf: 'flex-start',
@@ -739,6 +745,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minWidth: 260,
   },
+  heroDonutCardMobile: {
+    width: '100%',
+    minWidth: '100%',
+  },
   donutCardTitle: {
     fontFamily: Platform.OS === 'web' ? "'Plus Jakarta Sans', sans-serif" : 'System',
     fontSize: 12,
@@ -779,9 +789,9 @@ const styles = StyleSheet.create({
   },
   statsGridMobile: {
     flexDirection: 'column',
+    gap: 12,
   },
   statCard: {
-    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
     padding: 16,
@@ -792,6 +802,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 10,
     elevation: 2,
+    minHeight: 120,
+    justifyContent: 'space-between',
+  },
+  statCardDesktop: {
+    flex: 1,
+  },
+  statCardMobile: {
+    width: '100%',
   },
   iconChip: {
     width: 32,
@@ -1051,6 +1069,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 20,
   },
+  bottomListsGridMobile: {
+    flexDirection: 'column',
+    gap: 20,
+  },
+  bottomListCol: {
+  },
+  bottomListColDesktop: {
+    flex: 1,
+  },
+  bottomListColMobile: {
+    width: '100%',
+  },
   listCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -1080,6 +1110,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ECE9FC',
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
   rankBadgeText: {
     fontFamily: Platform.OS === 'web' ? "'Plus Jakarta Sans', sans-serif" : 'System',
@@ -1090,7 +1121,9 @@ const styles = StyleSheet.create({
   rankTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 4,
+    gap: 8,
   },
   rankLabel: {
     fontFamily: Platform.OS === 'web' ? "'Plus Jakarta Sans', sans-serif" : 'System',
@@ -1104,6 +1137,7 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '800',
     color: '#F0544B',
+    flexShrink: 0,
   },
   coralTrackBg: {
     height: 6,
@@ -1127,6 +1161,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
+    gap: 12,
   },
   brandName: {
     fontFamily: Platform.OS === 'web' ? "'Plus Jakarta Sans', sans-serif" : 'System',
@@ -1144,6 +1179,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
+    flexShrink: 0,
   },
   coralPillBadgeText: {
     fontFamily: Platform.OS === 'web' ? "'Plus Jakarta Sans', sans-serif" : 'System',

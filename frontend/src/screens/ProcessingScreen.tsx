@@ -281,6 +281,7 @@ const styles = StyleSheet.create({
   },
   mobileContent: {
     padding: space.md,
+    paddingBottom: 96,
   },
   header: {
     backgroundColor: color.surface,

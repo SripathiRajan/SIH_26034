@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "web:dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 expo start --web --port 8081",
     "web:lan": "cross-env NODE_OPTIONS=--max-old-space-size=4096 expo start --port 8081",
+    "web:https": "cross-env NODE_OPTIONS=--max-old-space-size=4096 expo start --https --port 8081",
     "export": "expo export --platform web"
   },
   "dependencies": {

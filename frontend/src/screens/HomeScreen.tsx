@@ -1,13 +1,45 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Platform, Modal, Image, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  useWindowDimensions,
+  Platform,
+  Image,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Svg, { Path, Rect, Circle, Line } from 'react-native-svg';
 import DemoBanner from '../components/DemoBanner';
 import { useAuth } from '../context/AuthContext';
+import { DEMO_MODE } from '../api/config';
+import { api } from '../api/client';
+import { MergedCoverage } from '../types';
+import { captureFromDeviceCamera } from '../utils/webCameraHelper';
 
 interface Props {
   navigation: any;
 }
+
+export interface PackagePhoto {
+  id: string;
+  uri: string;
+  name?: string;
+}
+
+export const STATUTORY_DECLARATIONS = [
+  { key: 'net_quantity', label: 'Net Quantity', section: '§6(1)(c)' },
+  { key: 'mrp', label: 'MRP', section: '§6(1)(e)' },
+  { key: 'manufacturer', label: 'Manufacturer', section: '§6(1)(a)' },
+  { key: 'manufacture_date', label: 'Mfg Date', section: '§6(1)(d)' },
+  { key: 'use_by', label: 'Use By', section: '§6(1)(da)' },
+  { key: 'consumer_care', label: 'Helpline', section: '§6(2)' },
+  { key: 'fssai', label: 'FSSAI Lic.', section: 'FSS §2.1' },
+  { key: 'country_of_origin', label: 'Origin', section: '§6(1)(aa)' },
+];
 
 /* Icons matching the mockup SVG definitions */
 function UploadIcon({ size = 16, color = '#FFFFFF' }: { size?: number; color?: string }) {
@@ -44,6 +76,41 @@ function ScanVisualIcon({ size = 34, color = 'rgba(255,255,255,0.5)' }: { size?:
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
       <Rect x="4" y="6" width="16" height="12" rx="1" />
       <Path d="M4 10h16M9 14h3" />
+    </Svg>
+  );
+}
+
+function CheckIcon({ size = 13, color = '#00C2A8' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M20 6L9 17l-5-5" />
+    </Svg>
+  );
+}
+
+function CloseIcon({ size = 10, color = '#FFFFFF' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <Line x1="18" y1="6" x2="6" y2="18" />
+      <Line x1="6" y1="6" x2="18" y2="18" />
+    </Svg>
+  );
+}
+
+function PlusIcon({ size = 16, color = '#00C2A8' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <Line x1="12" y1="5" x2="12" y2="19" />
+      <Line x1="5" y1="12" x2="19" y2="12" />
+    </Svg>
+  );
+}
+
+function TrashIcon({ size = 14, color = '#EF4444' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 6h18" />
+      <Path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
     </Svg>
   );
 }
@@ -113,24 +180,21 @@ export default function HomeScreen({ navigation }: Props) {
   const [toastShow, setToastShow] = useState<boolean>(false);
   const toastTimer = useRef<any>(null);
 
-  // Interactive scanner states
+  // Drag & drop state for web
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
-  const [isHeroCameraActive, setIsHeroCameraActive] = useState<boolean>(false);
-  const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
-  const [isScanningActive, setIsScanningActive] = useState<boolean>(false);
 
-  // Modal camera scanner state
-  const [isVideoScanOpen, setIsVideoScanOpen] = useState<boolean>(false);
-  const [scanSide, setScanSide] = useState<'front' | 'back' | 'full'>('front');
+  // Multi-photo state for inline inspection
+  const [photos, setPhotos] = useState<PackagePhoto[]>([]);
+  const [isAnalysing, setIsAnalysing] = useState<boolean>(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [mergedCoverage, setMergedCoverage] = useState<MergedCoverage | null>(null);
+  const [coverageFields, setCoverageFields] = useState<Record<string, any> | null>(null);
+  const [scanSessionId, setScanSessionId] = useState<string | null>(null);
 
-  // DOM Refs
-  const heroVideoRef = useRef<any>(null);
-  const heroStreamRef = useRef<any>(null);
-  const modalVideoRef = useRef<any>(null);
-  const modalStreamRef = useRef<any>(null);
-  const fileInputRef = useRef<any>(null);
+  // Hidden multi-file input ref for web
+  const multiFileInputRef = useRef<any>(null);
 
-  // Inject Web Google Fonts and CSS Keyframes
+  // Inject Web Google Fonts
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       if (!document.getElementById('inspection-portal-fonts')) {
@@ -145,68 +209,6 @@ export default function HomeScreen({ navigation }: Props) {
         const styleTag = document.createElement('style');
         styleTag.id = 'inspection-portal-styles';
         styleTag.innerHTML = `
-          @keyframes scan {
-            0%, 100% { top: 8px; }
-            50% { top: calc(100% - 10px); }
-          }
-          .scan-target {
-            position: relative !important;
-            width: 120px !important;
-            height: 150px !important;
-            border: 2px solid rgba(255,255,255,.35) !important;
-            border-radius: 10px !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            overflow: hidden !important;
-            cursor: pointer;
-            transition: border-color 0.2s ease, transform 0.15s ease;
-          }
-          .scan-target:hover {
-            border-color: rgba(0, 194, 168, 0.85) !important;
-            transform: scale(1.02);
-          }
-          .scan-target .corner {
-            position: absolute !important;
-            width: 16px !important;
-            height: 16px !important;
-            border-color: #00C2A8 !important;
-            z-index: 10 !important;
-          }
-          .scan-target .tl {
-            top: -2px !important; left: -2px !important;
-            border-top: 3px solid #00C2A8 !important;
-            border-left: 3px solid #00C2A8 !important;
-            border-radius: 6px 0 0 0 !important;
-          }
-          .scan-target .tr {
-            top: -2px !important; right: -2px !important;
-            border-top: 3px solid #00C2A8 !important;
-            border-right: 3px solid #00C2A8 !important;
-            border-radius: 0 6px 0 0 !important;
-          }
-          .scan-target .bl {
-            bottom: -2px !important; left: -2px !important;
-            border-bottom: 3px solid #00C2A8 !important;
-            border-left: 3px solid #00C2A8 !important;
-            border-radius: 0 0 0 6px !important;
-          }
-          .scan-target .br {
-            bottom: -2px !important; right: -2px !important;
-            border-bottom: 3px solid #00C2A8 !important;
-            border-right: 3px solid #00C2A8 !important;
-            border-radius: 0 0 6px 0 !important;
-          }
-          .scan-line {
-            position: absolute !important;
-            left: 6px !important;
-            right: 6px !important;
-            height: 2px !important;
-            background: #00C2A8 !important;
-            box-shadow: 0 0 10px 2px rgba(0,194,168,.7) !important;
-            animation: scan 2.2s ease-in-out infinite !important;
-            z-index: 12 !important;
-          }
           .inspect-hero::before {
             content: '';
             position: absolute;
@@ -258,45 +260,225 @@ export default function HomeScreen({ navigation }: Props) {
     toastTimer.current = setTimeout(() => setToastShow(false), 1800);
   };
 
-  // Process image analysis with visual laser sweep animation
-  const processImageScan = (uri: string, name: string = 'Image') => {
-    setPreviewImageUri(uri);
-    setIsScanningActive(true);
-    showToast(`Analyzing ${name}…`);
-    setTimeout(() => {
-      setIsScanningActive(false);
-      navigation.navigate('Processing', { imageUri: uri });
-    }, 700);
-  };
+  // 1. Take photo via device camera (works over HTTP on web via webCameraHelper)
+  const handleTakePhoto = async () => {
+    if (photos.length >= 6) {
+      Alert.alert('Batch Full', 'Maximum 6 photos allowed per package inspection.');
+      return;
+    }
 
-  // Image upload handler
-  const handleChooseImage = async () => {
-    if (Platform.OS === 'web' && fileInputRef.current) {
-      fileInputRef.current.click();
-    } else {
+    if (Platform.OS === 'web') {
       try {
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          quality: 0.85,
-        });
-        if (!result.canceled && result.assets && result.assets.length > 0) {
-          processImageScan(result.assets[0].uri, 'Selected photo');
+        const uri = await captureFromDeviceCamera();
+        if (uri) {
+          setPhotos((prev) => [
+            ...prev,
+            {
+              id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              uri,
+              name: `Photo ${prev.length + 1}`,
+            },
+          ]);
+          setMergedCoverage(null);
+          setCoverageFields(null);
+          setScanSessionId(null);
+          setAnalysisError(null);
         }
       } catch (e) {
-        navigation.navigate('Processing', { imageUri: '' });
+        console.warn('[HomeScreen] Camera capture failed:', e);
       }
+      return;
+    }
+
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Required', 'Camera access is required to capture photos.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setPhotos((prev) => [
+          ...prev,
+          {
+            id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            uri: result.assets[0].uri,
+            name: `Photo ${prev.length + 1}`,
+          },
+        ]);
+        setMergedCoverage(null);
+        setCoverageFields(null);
+        setScanSessionId(null);
+        setAnalysisError(null);
+      }
+    } catch (e) {
+      console.warn('[HomeScreen] Native camera error:', e);
     }
   };
 
-  const handleWebFileChange = (e: any) => {
+  // 2. Pick multiple photos from gallery
+  const handlePickGallery = async () => {
+    const remaining = Math.max(0, 6 - photos.length);
+    if (remaining <= 0) {
+      Alert.alert('Batch Full', 'Maximum 6 photos allowed per package inspection.');
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      if (multiFileInputRef.current) {
+        multiFileInputRef.current.click();
+      }
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        selectionLimit: remaining,
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const added: PackagePhoto[] = result.assets.slice(0, remaining).map((asset, i) => ({
+          id: `photo-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
+          uri: asset.uri,
+          name: `Photo ${photos.length + i + 1}`,
+        }));
+        setPhotos((prev) => [...prev, ...added]);
+        setMergedCoverage(null);
+        setCoverageFields(null);
+        setScanSessionId(null);
+        setAnalysisError(null);
+      }
+    } catch (e) {
+      console.warn('[HomeScreen] Gallery pick error:', e);
+    }
+  };
+
+  // 3. Web multi-file input change handler
+  const handleMultiWebFileChange = (e: any) => {
     if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const uri = URL.createObjectURL(file);
-      processImageScan(uri, file.name);
+      const files = Array.from(e.target.files) as File[];
+      const remaining = Math.max(0, 6 - photos.length);
+      const filesToAdd = files.slice(0, remaining);
+
+      filesToAdd.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const uri = event.target?.result as string;
+          if (uri) {
+            setPhotos((prev) => {
+              if (prev.length >= 6) return prev;
+              return [
+                ...prev,
+                { id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, uri, name: file.name },
+              ];
+            });
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+      setMergedCoverage(null);
+      setCoverageFields(null);
+      setScanSessionId(null);
+      setAnalysisError(null);
+      e.target.value = '';
     }
   };
 
-  // Drag and drop handlers for web
+  // 4. Remove a photo
+  const handleRemovePhoto = (id: string) => {
+    setPhotos((prev) => prev.filter((p) => p.id !== id));
+    setMergedCoverage(null);
+    setCoverageFields(null);
+    setAnalysisError(null);
+    if (scanSessionId) {
+      api.discardSession(scanSessionId);
+      setScanSessionId(null);
+    }
+  };
+
+  // 5. Clear all photos
+  const handleClearAll = () => {
+    if (scanSessionId) {
+      api.discardSession(scanSessionId);
+    }
+    setPhotos([]);
+    setMergedCoverage(null);
+    setCoverageFields(null);
+    setScanSessionId(null);
+    setAnalysisError(null);
+  };
+
+  // 6. Analyse captured photos with OCR
+  const handleAnalyse = async () => {
+    if (photos.length === 0) {
+      Alert.alert('No Photos', 'Please take or upload at least 1 photo.');
+      return;
+    }
+    setIsAnalysing(true);
+    setAnalysisError(null);
+    showToast(`Analyzing ${photos.length} ${photos.length === 1 ? 'view' : 'views'}…`);
+
+    const imageUris = photos.map((p) => p.uri);
+    try {
+      const response = await api.scanSession(imageUris, scanSessionId || undefined);
+      setScanSessionId(response.sessionId);
+      setMergedCoverage(response.mergedCoverage);
+      setCoverageFields(response.fields);
+      showToast(`OCR done: ${response.mergedCoverage.found.length} declarations identified`);
+    } catch (err: any) {
+      console.warn('[HomeScreen] scanSession error:', err);
+      if (DEMO_MODE) {
+        const demoSessId = scanSessionId || `demo-sess-${Date.now()}`;
+        setScanSessionId(demoSessId);
+        const isMulti = photos.length >= 2;
+        const mockCoverage: MergedCoverage = {
+          found: isMulti
+            ? ['net_quantity', 'mrp', 'manufacturer', 'manufacture_date', 'use_by', 'consumer_care', 'fssai', 'country_of_origin']
+            : ['net_quantity', 'mrp', 'manufacturer', 'manufacture_date'],
+          missing: isMulti
+            ? []
+            : ['use_by', 'consumer_care', 'fssai', 'country_of_origin'],
+          hintLine: isMulti
+            ? 'All statutory declarations detected across views'
+            : 'Capture reverse side to inspect use-by, FSSAI and helpline',
+          allFound: isMulti,
+        };
+        setMergedCoverage(mockCoverage);
+        setCoverageFields({
+          mrp: { value: '₹ 145.00', status: 'compliant' },
+          net_quantity: { value: '500 g', status: 'compliant' },
+          manufacturer: { value: 'Hindustan Foods Ltd.', status: 'compliant' },
+          manufacture_date: { value: '02/2025', status: 'compliant' },
+        });
+        showToast('Demo mode: sample OCR analysis generated');
+      } else {
+        setAnalysisError(err.message || 'OCR processing failed. Please verify backend connection.');
+      }
+    } finally {
+      setIsAnalysing(false);
+    }
+  };
+
+  // 7. Navigate to Processing Screen to finalize and view full report
+  const handleGenerateReport = () => {
+    if (scanSessionId) {
+      navigation.navigate('Processing', {
+        sessionId: scanSessionId,
+        imageUris: photos.map((p) => p.uri),
+      });
+    } else if (photos.length > 0) {
+      navigation.navigate('Processing', {
+        imageUri: photos[0].uri,
+      });
+    }
+  };
+
+  // 8. Web Drag and Drop
   const handleDragOver = (e: any) => {
     if (Platform.OS === 'web') {
       e.preventDefault();
@@ -316,134 +498,45 @@ export default function HomeScreen({ navigation }: Props) {
       e.preventDefault();
       setIsDragOver(false);
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        const file = e.dataTransfer.files[0];
-        const uri = URL.createObjectURL(file);
-        processImageScan(uri, file.name);
-      }
-    }
-  };
-
-  // Toggle interactive camera stream inside the Hero scanner target box
-  const toggleHeroCamera = async () => {
-    if (isHeroCameraActive) {
-      // Stop hero camera
-      if (heroStreamRef.current) {
-        heroStreamRef.current.getTracks().forEach((track: any) => track.stop());
-        heroStreamRef.current = null;
-      }
-      setIsHeroCameraActive(false);
-      showToast('Camera stopped');
-    } else {
-      // Start hero camera stream
-      showToast('Opening live camera stream…');
-      setIsHeroCameraActive(true);
-      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.mediaDevices) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-          });
-          heroStreamRef.current = stream;
-          setTimeout(() => {
-            if (heroVideoRef.current) heroVideoRef.current.srcObject = stream;
-          }, 150);
-        } catch (err) {
-          console.warn('Hero camera notice:', err);
-          showToast('Camera access unavailable');
-          setIsHeroCameraActive(false);
-        }
-      }
-    }
-  };
-
-  const captureHeroFrame = () => {
-    let capturedUri = '';
-    if (heroVideoRef.current) {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = heroVideoRef.current.videoWidth || 640;
-        canvas.height = heroVideoRef.current.videoHeight || 480;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(heroVideoRef.current, 0, 0, canvas.width, canvas.height);
-          capturedUri = canvas.toDataURL('image/jpeg', 0.85);
-        }
-      } catch (e) {
-        console.warn('Canvas capture fallback', e);
-      }
-    }
-    // Stop camera
-    if (heroStreamRef.current) {
-      heroStreamRef.current.getTracks().forEach((track: any) => track.stop());
-      heroStreamRef.current = null;
-    }
-    setIsHeroCameraActive(false);
-    processImageScan(capturedUri, 'Captured photo');
-  };
-
-  // Run instant sample demo scan
-  const runDemoScan = () => {
-    showToast('Loading sample product packaging…');
-    processImageScan('', 'Sample packaging');
-  };
-
-  // Modal video camera scanner
-  const handleStartModalScan = async () => {
-    showToast('Opening camera scanner…');
-    setIsVideoScanOpen(true);
-    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.mediaDevices) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        const files = Array.from(e.dataTransfer.files) as File[];
+        const remaining = Math.max(0, 6 - photos.length);
+        const filesToAdd = files.slice(0, remaining);
+        filesToAdd.forEach((file) => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const uri = event.target?.result as string;
+            if (uri) {
+              setPhotos((prev) => {
+                if (prev.length >= 6) return prev;
+                return [
+                  ...prev,
+                  { id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, uri, name: file.name },
+                ];
+              });
+            }
+          };
+          reader.readAsDataURL(file);
         });
-        modalStreamRef.current = stream;
-        setTimeout(() => {
-          if (modalVideoRef.current) modalVideoRef.current.srcObject = stream;
-        }, 100);
-      } catch (err) {
-        console.warn('Modal camera stream notice:', err);
+        setMergedCoverage(null);
+        setCoverageFields(null);
+        setScanSessionId(null);
+        setAnalysisError(null);
       }
     }
-  };
-
-  const handleStopModalScan = () => {
-    if (modalStreamRef.current) {
-      modalStreamRef.current.getTracks().forEach((track: any) => track.stop());
-      modalStreamRef.current = null;
-    }
-    setIsVideoScanOpen(false);
-  };
-
-  const captureModalFrame = () => {
-    let capturedUri = '';
-    if (modalVideoRef.current) {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = modalVideoRef.current.videoWidth || 640;
-        canvas.height = modalVideoRef.current.videoHeight || 480;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(modalVideoRef.current, 0, 0, canvas.width, canvas.height);
-          capturedUri = canvas.toDataURL('image/jpeg', 0.85);
-        }
-      } catch (e) {
-        console.warn('Canvas capture fallback', e);
-      }
-    }
-    handleStopModalScan();
-    processImageScan(capturedUri, 'Scanned product');
   };
 
   return (
     <View style={styles.bodyWrap}>
       <DemoBanner />
-      {/* Hidden file input for web */}
+      {/* Hidden multi-file input for web */}
       {Platform.OS === 'web' && (
         <input
           type="file"
-          ref={fileInputRef}
+          ref={multiFileInputRef}
+          multiple
           accept="image/*"
           style={{ display: 'none' }}
-          onChange={handleWebFileChange}
+          onChange={handleMultiWebFileChange}
         />
       )}
 
@@ -490,60 +583,89 @@ export default function HomeScreen({ navigation }: Props) {
           className="inspect-hero"
         >
           {/* Hero Left Copy */}
-          <View style={styles.heroCopy}>
+          <View style={[styles.heroCopy, isMobile && styles.heroCopyMobile]}>
             <View style={styles.eyebrow}>
               <Text style={styles.eyebrowText}>Legal Metrology compliance</Text>
             </View>
-            <Text style={styles.heroH1}>Scan any label. Know in seconds if it holds up.</Text>
-            <Text style={styles.heroP}>
-              Select a packaging image, capture a live photo, or scan a product to verify MRP, net quantity, dates, and mandatory font ratios.
+            <Text style={[styles.heroH1, isMobile && styles.heroH1Mobile]}>
+              Scan any label. Know in seconds if it holds up.
+            </Text>
+            <Text style={[styles.heroP, isMobile && styles.heroPMobile]}>
+              Capture or upload up to 6 package angles (Front, Back, MRP panel, FSSAI). Hit Analyse to run OCR instantly and inspect statutory declarations.
             </Text>
 
-            <View style={styles.actions}>
+            <View style={[styles.actions, isMobile && styles.actionsMobile]}>
               <TouchableOpacity
-                style={[styles.actionBtn, styles.actionPrimary]}
-                onPress={handleChooseImage}
+                style={[styles.actionBtn, styles.actionCamera, isMobile && styles.actionBtnMobile]}
+                onPress={handleTakePhoto}
+                activeOpacity={0.85}
+                // @ts-ignore
+                className="inspect-btn"
+              >
+                <CameraIcon size={16} color="#FFFFFF" />
+                <Text style={styles.actionBtnText}>Take photo</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionGallery, isMobile && styles.actionBtnMobile]}
+                onPress={handlePickGallery}
                 activeOpacity={0.85}
                 // @ts-ignore
                 className="inspect-btn"
               >
                 <UploadIcon size={16} color="#FFFFFF" />
-                <Text style={styles.actionPrimaryText}>Choose image file</Text>
+                <Text style={styles.actionBtnText}>Upload images</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionScan, isHeroCameraActive && styles.actionScanActive]}
-                onPress={toggleHeroCamera}
-                activeOpacity={0.85}
-                // @ts-ignore
-                className="inspect-btn"
-              >
-                <CameraIcon size={16} color={isHeroCameraActive ? '#FFFFFF' : '#062E28'} />
-                <Text style={[styles.actionScanText, isHeroCameraActive && styles.actionScanTextActive]}>
-                  {isHeroCameraActive ? 'Close camera' : 'Live product scan'}
-                </Text>
-              </TouchableOpacity>
+              {photos.length > 0 && (
+                <TouchableOpacity
+                  style={[
+                    styles.actionBtn,
+                    styles.actionAnalyse,
+                    isAnalysing && styles.actionAnalyseDisabled,
+                    isMobile && styles.actionBtnMobile,
+                  ]}
+                  onPress={handleAnalyse}
+                  disabled={isAnalysing}
+                  activeOpacity={0.85}
+                  // @ts-ignore
+                  className="inspect-btn"
+                >
+                  {isAnalysing ? (
+                    <ActivityIndicator size="small" color="#062E28" />
+                  ) : (
+                    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#062E28" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                      <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                    </Svg>
+                  )}
+                  <Text style={styles.actionAnalyseText}>
+                    {isAnalysing ? 'Running OCR…' : `Analyse (${photos.length})`}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionMultiAngle]}
-                onPress={() => navigation.navigate('Capture')}
-                activeOpacity={0.85}
-                // @ts-ignore
-                className="inspect-btn"
-              >
-                <LayersIcon size={16} color="#FFFFFF" />
-                <Text style={styles.actionMultiAngleText}>Multi-angle capture</Text>
-              </TouchableOpacity>
+              {photos.length > 0 && !isAnalysing && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionClear, isMobile && styles.actionBtnMobile]}
+                  onPress={handleClearAll}
+                  activeOpacity={0.85}
+                  // @ts-ignore
+                  className="inspect-btn"
+                >
+                  <TrashIcon size={14} color="#FF7B7B" />
+                  <Text style={styles.actionClearText}>Clear</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
-          {/* Hero Right Visual Scanner Target Box */}
+          {/* Hero Right Visual / Captured Views & Analysis Panel */}
           <View
             style={[
               styles.scanVisual,
               isMobile && styles.scanVisualMobile,
               isDragOver && styles.scanVisualDragOver,
-              isHeroCameraActive && styles.scanVisualCameraActive,
+              photos.length > 0 && styles.scanVisualWithPhotos,
             ]}
             // @ts-ignore
             onDragOver={handleDragOver}
@@ -552,63 +674,152 @@ export default function HomeScreen({ navigation }: Props) {
             // @ts-ignore
             onDrop={handleDrop}
           >
-            <TouchableOpacity
-              style={[
-                styles.scanTarget,
-                isDragOver && styles.scanTargetDragOver,
-                isHeroCameraActive && styles.scanTargetCameraActive,
-              ]}
-              onPress={isHeroCameraActive ? captureHeroFrame : handleChooseImage}
-              activeOpacity={0.9}
-              // @ts-ignore
-              className="scan-target"
-            >
-              {/* 4 Bracket Corners */}
-              {/* @ts-ignore */}
-              <View style={[styles.corner, styles.cornerTL]} className="corner tl" />
-              {/* @ts-ignore */}
-              <View style={[styles.corner, styles.cornerTR]} className="corner tr" />
-              {/* @ts-ignore */}
-              <View style={[styles.corner, styles.cornerBL]} className="corner bl" />
-              {/* @ts-ignore */}
-              <View style={[styles.corner, styles.cornerBR]} className="corner br" />
-
-              {/* Faint Outlined Label Icon Centered Inside Scan Target */}
-              {!isHeroCameraActive && !previewImageUri && (
-                <View style={styles.centerIconWrap}>
-                  <ScanVisualIcon size={34} color="rgba(255,255,255,0.5)" />
+            {photos.length === 0 ? (
+              <TouchableOpacity
+                style={styles.scanTargetEmpty}
+                onPress={handlePickGallery}
+                activeOpacity={0.85}
+              >
+                <View style={styles.emptyIconCircle}>
+                  <CameraIcon size={24} color="#00C2A8" />
                 </View>
-              )}
-
-              {/* Live Camera Stream or Image Preview */}
-              {isHeroCameraActive ? (
-                <View style={styles.heroCameraContainer}>
-                  {Platform.OS === 'web' ? (
-                    <video
-                      ref={heroVideoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }}
-                    />
-                  ) : (
-                    <Text style={styles.liveBadgeText}>CAMERA ACTIVE</Text>
+                <Text style={styles.emptyPromptTitle}>No package photos yet</Text>
+                <Text style={styles.emptyPromptSub}>
+                  {Platform.OS === 'web'
+                    ? 'Click or drag & drop up to 6 angles'
+                    : 'Tap Take photo or Upload images to add up to 6 views'}
+                </Text>
+                <View style={styles.emptyBadgeRow}>
+                  <Text style={styles.emptyBadge}>Front</Text>
+                  <Text style={styles.emptyBadge}>Back</Text>
+                  <Text style={styles.emptyBadge}>MRP Panel</Text>
+                  <Text style={styles.emptyBadge}>FSSAI</Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.photosPanel}>
+                {/* Header row with count & batch status */}
+                <View style={styles.panelHeaderRow}>
+                  <Text style={styles.panelHeaderTitle}>
+                    Captured Views ({photos.length}/6)
+                  </Text>
+                  {mergedCoverage && (
+                    <View
+                      style={[
+                        styles.coverageBadgePill,
+                        mergedCoverage.found.length >= 6
+                          ? styles.coverageBadgePillGreen
+                          : styles.coverageBadgePillAmber,
+                      ]}
+                    >
+                      <Text style={styles.coverageBadgePillText}>
+                        {mergedCoverage.found.length}/8 Statutory Found
+                      </Text>
+                    </View>
                   )}
-                  <View style={styles.captureOverlayBadge}>
-                    <Text style={styles.captureOverlayBadgeText}>CLICK TO CAPTURE</Text>
-                  </View>
                 </View>
-              ) : previewImageUri ? (
-                <Image source={{ uri: previewImageUri }} style={styles.previewImage as any} resizeMode="cover" />
-              ) : null}
 
-              {/* Horizontal Teal Animated Scan Line */}
-              <View
-                style={styles.scanLine}
-                // @ts-ignore
-                className="scan-line"
-              />
-            </TouchableOpacity>
+                {/* Horizontal thumbnail scroll */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.thumbnailStrip}
+                >
+                  {photos.map((photo, index) => (
+                    <View key={photo.id} style={styles.thumbCard}>
+                      <Image source={{ uri: photo.uri }} style={styles.thumbImage} resizeMode="cover" />
+                      <View style={styles.thumbIndexBadge}>
+                        <Text style={styles.thumbIndexText}>#{index + 1}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.thumbRemoveBtn}
+                        onPress={() => handleRemovePhoto(photo.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <CloseIcon size={10} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+
+                  {/* Add more button if slots remain */}
+                  {photos.length < 6 && (
+                    <TouchableOpacity
+                      style={styles.thumbAddCard}
+                      onPress={handlePickGallery}
+                      activeOpacity={0.8}
+                    >
+                      <PlusIcon size={18} color="#00C2A8" />
+                      <Text style={styles.thumbAddText}>Add</Text>
+                    </TouchableOpacity>
+                  )}
+                </ScrollView>
+
+                {/* Analysis Loading State */}
+                {isAnalysing && (
+                  <View style={styles.analysisLoadingBox}>
+                    <ActivityIndicator size="small" color="#00C2A8" />
+                    <Text style={styles.analysisLoadingText}>
+                      Running OCR across {photos.length} {photos.length === 1 ? 'view' : 'views'}…
+                    </Text>
+                  </View>
+                )}
+
+                {/* Analysis Error */}
+                {analysisError && (
+                  <View style={styles.analysisErrorBox}>
+                    <Text style={styles.analysisErrorText}>{analysisError}</Text>
+                  </View>
+                )}
+
+                {/* Live Statutory Declarations Badges */}
+                {mergedCoverage && !isAnalysing && (
+                  <View style={styles.declarationsSection}>
+                    <View style={styles.declarationsGrid}>
+                      {STATUTORY_DECLARATIONS.map((decl) => {
+                        const isFound = mergedCoverage.found.includes(decl.key);
+                        return (
+                          <View
+                            key={decl.key}
+                            style={[
+                              styles.declChip,
+                              isFound ? styles.declChipFound : styles.declChipMissing,
+                            ]}
+                          >
+                            {isFound ? (
+                              <CheckIcon size={11} color="#00C2A8" />
+                            ) : (
+                              <Text style={styles.declMissingMark}>✕</Text>
+                            )}
+                            <Text
+                              style={[
+                                styles.declChipText,
+                                isFound ? styles.declChipTextFound : styles.declChipTextMissing,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {decl.label}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+
+                    {/* View Full Report Button */}
+                    <TouchableOpacity
+                      style={styles.generateReportBtn}
+                      onPress={handleGenerateReport}
+                      activeOpacity={0.85}
+                      // @ts-ignore
+                      className="inspect-btn"
+                    >
+                      <Text style={styles.generateReportBtnText}>
+                        View Full Inspection Report →
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </View>
 
@@ -618,7 +829,7 @@ export default function HomeScreen({ navigation }: Props) {
         <View style={[styles.services, isMobile && styles.servicesMobile]}>
           {/* Card 1: Inspection records */}
           <TouchableOpacity
-            style={styles.serviceCard}
+            style={[styles.serviceCard, isMobile && styles.serviceCardMobile]}
             onPress={() => {
               showToast('Opening inspection records…');
               setTimeout(() => navigation.navigate('HistoryTab'), 200);
@@ -642,7 +853,7 @@ export default function HomeScreen({ navigation }: Props) {
 
           {/* Card 2: Rules database */}
           <TouchableOpacity
-            style={styles.serviceCard}
+            style={[styles.serviceCard, isMobile && styles.serviceCardMobile]}
             onPress={() => {
               showToast('Opening rules database…');
               setTimeout(() => navigation.navigate('RulesTab'), 200);
@@ -666,7 +877,7 @@ export default function HomeScreen({ navigation }: Props) {
 
           {/* Card 3: Compliance analytics */}
           <TouchableOpacity
-            style={styles.serviceCard}
+            style={[styles.serviceCard, isMobile && styles.serviceCardMobile]}
             onPress={() => {
               showToast('Opening compliance analytics…');
               setTimeout(() => navigation.navigate('DashboardTab'), 200);
@@ -690,7 +901,7 @@ export default function HomeScreen({ navigation }: Props) {
 
           {/* Card 4: Ask assistant */}
           <TouchableOpacity
-            style={styles.serviceCard}
+            style={[styles.serviceCard, isMobile && styles.serviceCardMobile]}
             onPress={() => {
               showToast('Opening assistant…');
               setTimeout(() => navigation.navigate('AssistantTab'), 200);
@@ -721,75 +932,7 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
       )}
 
-      {/* Live Video Camera Stream Modal */}
-      <Modal visible={isVideoScanOpen} animationType="fade" transparent={true} onRequestClose={handleStopModalScan}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <View style={styles.liveDot} />
-                <Text style={styles.modalTitle}>Live Product Scanner</Text>
-              </View>
-              <TouchableOpacity onPress={handleStopModalScan} style={styles.closeModalBtn}>
-                <Text style={styles.closeModalText}>Close</Text>
-              </TouchableOpacity>
-            </View>
 
-            <View style={styles.videoViewport}>
-              {Platform.OS === 'web' ? (
-                <video
-                  ref={modalVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{ width: '100%', height: 320, objectFit: 'cover', borderRadius: 12 }}
-                />
-              ) : (
-                <View style={styles.nativeCameraFallback}>
-                  <Text style={styles.nativeCameraText}>Live Camera Viewfinder Stream</Text>
-                </View>
-              )}
-
-              <View style={styles.targetReticle}>
-                <View style={[styles.cornerModal, styles.topLeftModal]} />
-                <View style={[styles.cornerModal, styles.topRightModal]} />
-                <View style={[styles.cornerModal, styles.bottomLeftModal]} />
-                <View style={[styles.cornerModal, styles.bottomRightModal]} />
-                <Text style={styles.reticleBadge}>AIM PACKAGING LABEL</Text>
-              </View>
-            </View>
-
-            <View style={styles.sideSelectorRow}>
-              <TouchableOpacity
-                style={[styles.sideChip, scanSide === 'front' && styles.sideChipActive]}
-                onPress={() => setScanSide('front')}
-              >
-                <Text style={[styles.sideChipText, scanSide === 'front' && styles.sideChipTextActive]}>Front Panel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.sideChip, scanSide === 'back' && styles.sideChipActive]}
-                onPress={() => setScanSide('back')}
-              >
-                <Text style={[styles.sideChipText, scanSide === 'back' && styles.sideChipTextActive]}>Back / MRP</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.sideChip, scanSide === 'full' && styles.sideChipActive]}
-                onPress={() => setScanSide('full')}
-              >
-                <Text style={[styles.sideChipText, scanSide === 'full' && styles.sideChipTextActive]}>360° Product</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalActionRow}>
-              <TouchableOpacity style={styles.captureFrameBtn} onPress={captureModalFrame} activeOpacity={0.85}>
-                <Text style={styles.captureFrameBtnText}>Capture Frame & Analyze</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -883,12 +1026,22 @@ const styles = StyleSheet.create({
   },
   heroMobile: {
     flexDirection: 'column',
-    paddingHorizontal: 20,
-    paddingVertical: 28,
+    alignItems: 'stretch',
+    paddingHorizontal: 18,
+    paddingVertical: 24,
+    marginHorizontal: 14,
+    gap: 18,
   },
   heroCopy: {
     flex: 1.2,
     zIndex: 2,
+  },
+  heroCopyMobile: {
+    width: '100%',
+    flex: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 'auto',
   },
   eyebrow: {
     alignSelf: 'flex-start',
@@ -911,6 +1064,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 12,
   },
+  heroH1Mobile: {
+    fontSize: 24,
+    lineHeight: 30,
+    marginBottom: 10,
+  },
   heroP: {
     fontFamily: Platform.OS === 'web' ? "'IBM Plex Sans', sans-serif" : 'System',
     color: '#B9BFDA',
@@ -919,9 +1077,20 @@ const styles = StyleSheet.create({
     marginBottom: 22,
     maxWidth: 420,
   },
+  heroPMobile: {
+    fontSize: 13.5,
+    lineHeight: 20,
+    marginBottom: 18,
+    maxWidth: '100%',
+  },
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 10,
+  },
+  actionsMobile: {
+    flexDirection: 'column',
+    width: '100%',
     gap: 10,
   },
   actionBtn: {
@@ -933,46 +1102,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  actionPrimary: {
-    backgroundColor: '#6C5CE7',
+  actionBtnMobile: {
+    width: '100%',
+    justifyContent: 'center',
   },
-  actionPrimaryText: {
-    color: '#FFFFFF',
-    fontFamily: Platform.OS === 'web' ? "'Space Grotesk', sans-serif" : 'System',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  actionScan: {
+  actionCamera: {
     backgroundColor: '#00C2A8',
   },
-  actionScanActive: {
-    backgroundColor: '#FF5C5C',
+  actionGallery: {
+    backgroundColor: '#6C5CE7',
   },
-  actionMultiAngle: {
-    backgroundColor: '#4F46E5',
-  },
-  actionMultiAngleText: {
+  actionBtnText: {
     color: '#FFFFFF',
     fontFamily: Platform.OS === 'web' ? "'Space Grotesk', sans-serif" : 'System',
     fontSize: 14,
     fontWeight: '600',
   },
-  actionScanText: {
+  actionAnalyse: {
+    backgroundColor: '#00C2A8',
+  },
+  actionAnalyseDisabled: {
+    opacity: 0.7,
+  },
+  actionAnalyseText: {
     color: '#062E28',
     fontFamily: Platform.OS === 'web' ? "'Space Grotesk', sans-serif" : 'System',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  actionScanTextActive: {
-    color: '#FFFFFF',
-  },
-  actionDemo: {
-    backgroundColor: 'rgba(255,255,255,.08)',
+  actionClear: {
+    backgroundColor: 'rgba(255, 92, 92, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,.2)',
+    borderColor: 'rgba(255, 92, 92, 0.3)',
   },
-  actionDemoText: {
-    color: '#FFFFFF',
+  actionClearText: {
+    color: '#FF7B7B',
     fontFamily: Platform.OS === 'web' ? "'Space Grotesk', sans-serif" : 'System',
     fontSize: 14,
     fontWeight: '600',
@@ -980,153 +1144,274 @@ const styles = StyleSheet.create({
 
   /* Scan visual box */
   scanVisual: {
-    flex: 1,
-    height: 220,
+    flex: 1.1,
+    minHeight: 220,
     backgroundColor: 'rgba(255,255,255,.06)',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,.14)',
-    borderRadius: 16,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
     zIndex: 2,
     width: '100%',
+    padding: 16,
   },
   scanVisualMobile: {
-    height: 170,
+    width: '100%',
+    flex: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 'auto',
+    marginTop: 14,
+    minHeight: 180,
   },
   scanVisualDragOver: {
     backgroundColor: 'rgba(0, 194, 168, 0.15)',
     borderColor: '#00C2A8',
   },
-  scanVisualCameraActive: {
-    borderColor: '#00C2A8',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+  scanVisualWithPhotos: {
+    backgroundColor: 'rgba(18, 28, 54, 0.7)',
+    borderColor: 'rgba(0, 194, 168, 0.35)',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
   },
-  scanTarget: {
-    width: 140,
-    height: 165,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,.35)',
-    borderRadius: 10,
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  scanTargetDragOver: {
-    borderColor: '#00C2A8',
-  },
-  scanTargetCameraActive: {
-    borderColor: '#00C2A8',
-    width: '90%',
-    height: 180,
-  },
-  corner: {
-    position: 'absolute',
-    width: 16,
-    height: 16,
-    borderColor: '#00C2A8',
-    zIndex: 10,
-  },
-  cornerHighlight: {
-    borderColor: '#00C2A8',
-    borderWidth: 3,
-  },
-  cornerTL: {
-    top: -2,
-    left: -2,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-    borderTopLeftRadius: 6,
-  },
-  cornerTR: {
-    top: -2,
-    right: -2,
-    borderTopWidth: 3,
-    borderRightWidth: 3,
-    borderTopRightRadius: 6,
-  },
-  cornerBL: {
-    bottom: -2,
-    left: -2,
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
-    borderBottomLeftRadius: 6,
-  },
-  cornerBR: {
-    bottom: -2,
-    right: -2,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
-    borderBottomRightRadius: 6,
-  },
-  scanLine: {
-    position: 'absolute',
-    left: 6,
-    right: 6,
-    height: 2,
-    backgroundColor: '#00C2A8',
-    shadowColor: '#00C2A8',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 10,
-    zIndex: 12,
-  },
-  scanLineActive: {
-    backgroundColor: '#FF5C5C',
-    shadowColor: '#FF5C5C',
-  },
-  centerIconWrap: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
+
+  /* Empty scan target prompt */
+  scanTargetEmpty: {
+    width: '100%',
+    minHeight: 180,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 5,
+    padding: 16,
   },
-  dragHintText: {
-    fontSize: 9.5,
+  emptyIconCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0, 194, 168, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  emptyPromptTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.7)',
-    letterSpacing: 0.5,
+    fontFamily: Platform.OS === 'web' ? "'Space Grotesk', sans-serif" : 'System',
+    marginBottom: 4,
+  },
+  emptyPromptSub: {
+    color: '#B9BFDA',
+    fontSize: 12.5,
     textAlign: 'center',
+    maxWidth: 280,
+    marginBottom: 12,
   },
-  previewImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
+  emptyBadgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
-  heroCameraContainer: {
+  emptyBadge: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    color: '#00C2A8',
+    fontSize: 11,
+    fontWeight: '600',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+
+  /* Photos panel */
+  photosPanel: {
     width: '100%',
-    height: '100%',
-    borderRadius: 8,
+    gap: 12,
+  },
+  panelHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  panelHeaderTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'web' ? "'Space Grotesk', sans-serif" : 'System',
+    letterSpacing: 0.2,
+  },
+  coverageBadgePill: {
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
+    borderRadius: 999,
+  },
+  coverageBadgePillGreen: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  coverageBadgePillAmber: {
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  coverageBadgePillText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  /* Thumbnail strip */
+  thumbnailStrip: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  thumbCard: {
+    width: 68,
+    height: 68,
+    borderRadius: 10,
     overflow: 'hidden',
     position: 'relative',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#0F1A30',
+  },
+  thumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbIndexBadge: {
+    position: 'absolute',
+    bottom: 3,
+    left: 3,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 4,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  thumbIndexText: {
+    color: '#00C2A8',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  thumbRemoveBtn: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  liveBadgeText: {
+  thumbAddCard: {
+    width: 68,
+    height: 68,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(0, 194, 168, 0.5)',
+    backgroundColor: 'rgba(0, 194, 168, 0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  thumbAddText: {
     color: '#00C2A8',
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+
+  /* Analysis states */
+  analysisLoadingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(0, 194, 168, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 194, 168, 0.3)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  analysisLoadingText: {
+    color: '#00C2A8',
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  analysisErrorBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  analysisErrorText: {
+    color: '#FF8A8A',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '500',
   },
-  captureOverlayBadge: {
-    position: 'absolute',
-    bottom: 8,
-    backgroundColor: '#00C2A8',
-    paddingHorizontal: 10,
+
+  /* Live Statutory Declarations */
+  declarationsSection: {
+    gap: 10,
+    marginTop: 4,
+  },
+  declarationsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  declChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 999,
-    zIndex: 15,
+    borderRadius: 6,
+    borderWidth: 1,
   },
-  captureOverlayBadgeText: {
-    color: '#062E28',
-    fontSize: 9.5,
+  declChipFound: {
+    backgroundColor: 'rgba(0, 194, 168, 0.15)',
+    borderColor: 'rgba(0, 194, 168, 0.4)',
+  },
+  declChipMissing: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  declMissingMark: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.5,
+  },
+  declChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  declChipTextFound: {
+    color: '#00C2A8',
+  },
+  declChipTextMissing: {
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  generateReportBtn: {
+    backgroundColor: '#6C5CE7',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  generateReportBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'web' ? "'Space Grotesk', sans-serif" : 'System',
   },
 
   /* Section label & Services grid */
@@ -1158,6 +1443,10 @@ const styles = StyleSheet.create({
     borderColor: '#E4E5F0',
     borderRadius: 16,
     padding: 20,
+  },
+  serviceCardMobile: {
+    width: '100%',
+    minWidth: '100%',
   },
   serviceIcon: {
     width: 42,
@@ -1212,162 +1501,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-
-  /* Live camera modal */
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(18, 20, 28, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  modalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    width: '100%',
-    maxWidth: 640,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  liveDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#FF5C5C',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#12141C',
-  },
-  closeModalBtn: {
-    padding: 4,
-  },
-  closeModalText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#9498AC',
-  },
-  videoViewport: {
-    height: 320,
-    backgroundColor: '#12141C',
-    borderRadius: 12,
-    overflow: 'hidden',
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  nativeCameraFallback: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  nativeCameraText: {
-    color: '#9498AC',
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  targetReticle: {
-    position: 'absolute',
-    top: 40,
-    bottom: 40,
-    left: 40,
-    right: 40,
-    borderWidth: 1.5,
-    borderColor: 'rgba(0, 194, 168, 0.6)',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  reticleBadge: {
-    backgroundColor: 'rgba(0, 194, 168, 0.85)',
-    color: '#062E28',
-    fontSize: 10,
-    fontWeight: '700',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    position: 'absolute',
-    top: 12,
-  },
-  cornerModal: {
-    position: 'absolute',
-    width: 20,
-    height: 20,
-    borderColor: '#00C2A8',
-  },
-  topLeftModal: {
-    top: -2,
-    left: -2,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-  },
-  topRightModal: {
-    top: -2,
-    right: -2,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-  },
-  bottomLeftModal: {
-    bottom: -2,
-    left: -2,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-  },
-  bottomRightModal: {
-    bottom: -2,
-    right: -2,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-  },
-  sideSelectorRow: {
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'center',
-    marginVertical: 16,
-  },
-  sideChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: '#F3F4FA',
-    borderWidth: 1,
-    borderColor: '#E4E5F0',
-  },
-  sideChipActive: {
-    backgroundColor: '#6C5CE7',
-    borderColor: '#6C5CE7',
-  },
-  sideChipText: {
-    fontSize: 12,
-    color: '#5D6178',
-    fontWeight: '500',
-  },
-  sideChipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  modalActionRow: {
-    alignItems: 'center',
-  },
-  captureFrameBtn: {
-    backgroundColor: '#6C5CE7',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 999,
-    width: '100%',
-    alignItems: 'center',
-  },
-  captureFrameBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
 });
+
 
 

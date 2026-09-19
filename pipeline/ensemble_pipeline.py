@@ -20,6 +20,7 @@ def ensemble_scan(
     save_annotation: bool = True,
     enable_vlm_fallback: bool = False,
     use_ensemble: bool = False,
+    session_mode: bool = False,
 ) -> Dict[str, Any]:
     """
     Production OCR Pipeline (CB1 engines + CB2 cascaded gating + spatial merge):
@@ -38,7 +39,7 @@ def ensemble_scan(
     from pipeline.spatial_merger import merge_and_sort
     from core.config import IOU_MERGE_THRESHOLD
 
-    logger.info(f"Starting OCR scan on: {os.path.basename(image_path)} (use_ensemble={use_ensemble})")
+    logger.info(f"Starting OCR scan on: {os.path.basename(image_path)} (use_ensemble={use_ensemble}, session_mode={session_mode})")
     t_start = time.time()
 
     deskew_path = None
@@ -63,6 +64,7 @@ def ensemble_scan(
         logger.info(f"  ✓ PaddleOCR: {len(paddle_results)} regions")
 
         skip_tier2 = False
+        found_t1 = 0
         if paddle_results:
             avg_conf = sum(r["confidence"] for r in paddle_results) / len(paddle_results)
             all_results.extend(paddle_results)
@@ -88,7 +90,15 @@ def ensemble_scan(
             # Sequential on purpose: both engines are CPU-bound (OMP threads pinned to 1),
             # and parallel first-use lazy imports crash natively on Windows (OpenMP/DLL race).
             logger.info("  Stage 2: Low confidence or missing fields — running Tier 2 engines")
-            for runner, name in ((run_easyocr, "EasyOCR"), (run_surya_ocr, "SuryaOCR")):
+            tier2_runners = []
+            if not session_mode:
+                tier2_runners = [(run_easyocr, "EasyOCR"), (run_surya_ocr, "SuryaOCR")]
+            else:
+                skip_easy = found_t1 >= 4  # enough coverage; more angles will fill the rest
+                if not skip_easy:
+                    tier2_runners = [(run_easyocr, "EasyOCR")]
+                # SuryaOCR always skipped in session_mode
+            for runner, name in tier2_runners:
                 try:
                     res = runner(active_path)
                     logger.info(f"  ✓ {name}: {len(res)} regions")

@@ -24,6 +24,7 @@ FIELD_MAP_CB2_TO_CB1 = {
 def normalize_date_token(token: str) -> str:
     """
     Normalizes OCR errors in dot-matrix and stamped dates:
+    - Preserves relative duration statements (e.g. 'BEST BEFORE NINE MONTHS FROM PACKAGING')
     - Dot matrix month corrections (1UN/IUN/!UN/N2026 -> JUN, 0CT -> OCT, 0EC/OEC -> DEC, etc.)
     - Disambiguates MM/YY -> MM/20YY (if 2-digit year)
     - Disambiguates DD/MM/YY -> DD/MM/20YY
@@ -31,6 +32,9 @@ def normalize_date_token(token: str) -> str:
     if not token:
         return token
     t = token.strip()
+    if re.search(r"(?:month|day|week|year|pkg|packing|packaging|packging|mfg|manufacture)", t, re.I):
+        return re.sub(r"\s+", " ", t)
+
     t = re.sub(r"[\._\-\s]+", "/", t)
 
     dot_matrix_map = [
@@ -65,12 +69,68 @@ def normalize_date_token(token: str) -> str:
     return t
 
 
-def _extract_table_dates(full_text: str, all_results: List[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
+MONTH_NAMES = {'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'}
+
+
+def is_valid_date(tok: str) -> bool:
+    """Validates that a token represents an actual calendar date, not arbitrary text or numeric IDs."""
+    if not tok:
+        return False
+    t = tok.strip().lower()
+    # DD/MM/YYYY or DD/MM/YY
+    m_dmy = re.match(r"^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](20\d{2}|\d{2})$", t)
+    if m_dmy:
+        d, m, y = int(m_dmy.group(1)), int(m_dmy.group(2)), int(m_dmy.group(3))
+        if 1 <= d <= 31 and 1 <= m <= 12:
+            return True
+    # MM/YYYY or MM/YY
+    m_my = re.match(r"^(\d{1,2})[\/\-.](20\d{2}|\d{2})$", t)
+    if m_my:
+        m, y = int(m_my.group(1)), int(m_my.group(2))
+        if 1 <= m <= 12:
+            return True
+    # MON/YYYY or MON/YY
+    m_mony = re.match(r"^([a-z]{3})[\/\-.](20\d{2}|\d{2})$", t)
+    if m_mony:
+        mon = m_mony.group(1)
+        if mon in MONTH_NAMES:
+            return True
+    # DD/MON/YYYY or DD/MON/YY
+    m_dmon = re.match(r"^(\d{1,2})[\/\-.]([a-z]{3})[\/\-.](20\d{2}|\d{2})$", t)
+    if m_dmon:
+        d, mon = int(m_dmon.group(1)), m_dmon.group(2)
+        if 1 <= d <= 31 and mon in MONTH_NAMES:
+            return True
+    # Compact 6-digit DDMMYY (e.g. 150728 -> 15/07/28)
+    if re.match(r"^\d{6}$", t):
+        d, m, y = int(t[:2]), int(t[2:4]), int(t[4:])
+        if 1 <= d <= 31 and 1 <= m <= 12 and 20 <= y <= 35:
+            return True
+    # Compact 7-digit DDMMYYY (e.g. 1507206 -> 15/07/2026 where a digit was dropped by OCR)
+    if re.match(r"^\d{7}$", t):
+        d, m = int(t[:2]), int(t[2:4])
+        if 1 <= d <= 31 and 1 <= m <= 12 and t[4:6] == "20":
+            return True
+    # Compact 8-digit DDMMYYYY (e.g. 15072026 -> 15/07/2026)
+    if re.match(r"^\d{8}$", t):
+        d, m, y = int(t[:2]), int(t[2:4]), int(t[4:])
+        if 1 <= d <= 31 and 1 <= m <= 12 and 2020 <= y <= 2035:
+            return True
+    return False
+
+
+def _extract_table_dates(
+    full_text: str,
+    all_results: List[Dict[str, Any]],
+    exp_already_found: bool = False,
+    mfg_already_found: bool = False,
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Extracts packaging date (manufacture_date) and use_by date from table/column layouts,
-    fused dot-matrix tokens (e.g. 'N20260CT/2026'), and nearby date tokens.
+    fused dot-matrix tokens (e.g. 'JUN/2026OCT/2026'), and nearby date tokens.
+    Excludes FSSAI licenses (14 digits), phone numbers (10 digits), and postal PIN codes (6 digits).
     """
-    has_mfg_header = bool(re.search(r"(?:date\s*of\s*(?:pkg|packing|packaging)|mfg|pkd|dom)", full_text, re.I))
+    has_mfg_header = bool(re.search(r"(?:date\s*of\s*(?:pkg|packing|packaging)|mfg|pkd|dom|packed)", full_text, re.I))
     has_exp_header = bool(re.search(r"(?:use\s*by|best\s*before|expiry|exp)", full_text, re.I))
 
     # 1. Search for fused dual dates like 'N20260CT/2026', 'JUN/2026OCT/2026'
@@ -81,24 +141,50 @@ def _extract_table_dates(full_text: str, all_results: List[Dict[str, Any]]) -> T
     )
     if fused_match:
         d1, d2 = normalize_date_token(fused_match.group(1)), normalize_date_token(fused_match.group(2))
-        return d1, d2
+        if is_valid_date(d1) and is_valid_date(d2):
+            return d1, d2
 
     # 2. Search for date candidates across full_text and all_results
     raw_texts = [full_text] + [r.get("text", "") for r in all_results]
     date_candidates: List[str] = []
     seen = set()
+
     for text in raw_texts:
-        found = re.findall(r"\b([0-9A-Za-z]{2,4}[\/\-](?:20\d{2}|\d{2})|\d{1,2}[\/\-]\d{1,2}[\/\-](?:20\d{2}|\d{2}))\b", text, re.I)
+        # Strip out 14-digit FSSAI licenses, 10-digit phone numbers, and address PIN codes before searching
+        clean_t = re.sub(r"\b(?:lic(?:\s*no\.?)?|fssai)?\s*[12]\d{13}\b", " ", text, flags=re.I)
+        clean_t = re.sub(r"\b(?:\+?91[\s\-]?)?[6-9]\d{9}\b", " ", clean_t)
+        # Only strip 6-digit PIN if separated with space or in address context (e.g. '625 009')
+        clean_t = re.sub(r"\b[1-9]\d{2}\s+\d{3}\b", " ", clean_t)
+
+        found = re.findall(
+            r"\b((?:0?[1-9]|[12]\d|3[01])[\/\-.](?:0?[1-9]|1[0-2])[\/\-.](?:20\d{2}|\d{2})|"
+            r"(?:0?[1-9]|1[0-2])[\/\-.](?:20\d{2}|\d{2})|"
+            r"[A-Za-z]{3}[\/\-.](?:20\d{2}|\d{2})|"
+            r"(?:0?[1-9]|[12]\d|3[01])[\/\-.][A-Za-z]{3}[\/\-.](?:20\d{2}|\d{2})|"
+            r"\b\d{6,8}\b)\b",
+            clean_t,
+            re.I
+        )
         for f in found:
             f_norm = normalize_date_token(f)
-            if f_norm.lower() not in seen:
+            if is_valid_date(f_norm) and f_norm.lower() not in seen:
                 seen.add(f_norm.lower())
+                if re.match(r"^\d{6}$", f_norm):
+                    f_norm = f"{f_norm[:2]}/{f_norm[2:4]}/20{f_norm[4:]}"
+                elif re.match(r"^\d{7}$", f_norm):
+                    f_norm = f"{f_norm[:2]}/{f_norm[2:4]}/202{f_norm[6]}"
+                elif re.match(r"^\d{8}$", f_norm):
+                    f_norm = f"{f_norm[:2]}/{f_norm[2:4]}/{f_norm[4:]}"
                 date_candidates.append(f_norm)
 
-    if len(date_candidates) >= 2 and (has_mfg_header or has_exp_header):
+    if len(date_candidates) >= 2:
         return date_candidates[0], date_candidates[1]
     elif len(date_candidates) == 1:
-        if has_mfg_header and not has_exp_header:
+        if exp_already_found and not mfg_already_found:
+            return date_candidates[0], None
+        elif mfg_already_found and not exp_already_found:
+            return None, date_candidates[0]
+        elif has_mfg_header and not has_exp_header:
             return date_candidates[0], None
         elif has_exp_header and not has_mfg_header:
             return None, date_candidates[0]
@@ -106,6 +192,7 @@ def _extract_table_dates(full_text: str, all_results: List[Dict[str, Any]]) -> T
             return date_candidates[0], None
 
     return None, None
+
 
 
 def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], str, Dict[str, Any]]:
@@ -270,7 +357,12 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
 
     # 4. Table / column dual-date resolution fallback for manufacture_date & use_by (only if not on flap)
     if not flap_detected and (not extracted["manufacture_date"]["found"] or not extracted["use_by"]["found"]):
-        mfg_date, exp_date = _extract_table_dates(full_text, all_results)
+        mfg_date, exp_date = _extract_table_dates(
+            full_text,
+            all_results,
+            exp_already_found=extracted["use_by"]["found"],
+            mfg_already_found=extracted["manufacture_date"]["found"],
+        )
         if mfg_date and not extracted["manufacture_date"]["found"]:
             extracted["manufacture_date"] = {
                 "found": True,
@@ -324,4 +416,123 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                     }
                     break
 
+    # 5.5 Fallback for MRP: standalone price next to / near MRP table header
+    if not extracted["mrp"]["found"]:
+        if re.search(r"(?:m\.?r\.?p|maximum\s+retail\s+price)", full_text, re.I):
+            for r in all_results:
+                t = r.get("text", "").strip()
+                m_price = re.search(r"^(?:(?:rs\.?|₹|\?|inr)\s*)?(\d{1,4}\.\d{2})\b", t, re.I)
+                if m_price:
+                    val = float(m_price.group(1))
+                    if 1.0 <= val <= 100000.0:
+                        extracted["mrp"] = {
+                            "found": True,
+                            "value": f"M.R.P. RS {m_price.group(1)}",
+                            "captured": m_price.group(1),
+                            "confidence": float(r.get("confidence", 0.88)),
+                            "source": "table_mrp_resolver",
+                            "rule": MANDATORY_FIELDS["mrp"]["rule"],
+                            "label": MANDATORY_FIELDS["mrp"]["label"],
+                            "location": "ON_PANEL"
+                        }
+                        break
+
+    # 6. Fallback for Net Quantity: standalone metric declarations outside nutrition tables
+    if not extracted["net_quantity"]["found"]:
+        nutritional_keywords = {'protein', 'fat', 'energy', 'carb', 'carbohydrate', 'kcals', 'each', 'contains', 'per', 'sugar', 'cholesterol', 'sodium', 'serving'}
+        raw_texts = [r.get("text", "") for r in all_results]
+        best_cand = None
+        best_conf = 0.88
+
+        for i, r in enumerate(all_results):
+            t = r.get("text", "").strip()
+            # Match standard metric units e.g. '100 gms', '100 g', '500 g', '1 kg', '200 ml'
+            m = re.search(r"\b(\d+(?:\.\d+)?)\s*(gms?|g|kg|ml|l|ltrs?|count|units?|u|n)\b", t, re.I)
+            if m:
+                val = float(m.group(1))
+                unit = m.group(2)
+                # Exclude nutrient breakdown amounts < 1g (e.g. 0.4g, 0.2g)
+                if val < 1.0 and unit.lower() in ('g', 'gm', 'gms'):
+                    continue
+                # Exclude lines part of nutrition facts table
+                if any(k in t.lower() for k in nutritional_keywords):
+                    continue
+                # Exclude if surrounding tokens contain nutritional keywords
+                surrounding = ' '.join(raw_texts[max(0, i-2):min(len(raw_texts), i+3)]).lower()
+                if any(k in surrounding for k in ('protein', 'fat', 'carbohydrate', 'energy', 'kcals')):
+                    continue
+
+                best_cand = f"{m.group(1)} {m.group(2)}"
+                best_conf = float(r.get("confidence", 0.88))
+                break
+
+        if best_cand:
+            extracted["net_quantity"] = {
+                "found": True,
+                "value": f"NET WEIGHT: {best_cand}",
+                "captured": best_cand,
+                "confidence": best_conf,
+                "source": "metric_quantity_resolver",
+                "rule": MANDATORY_FIELDS["net_quantity"]["rule"],
+                "label": MANDATORY_FIELDS["net_quantity"]["label"],
+                "location": "ON_PANEL"
+            }
+
+    # 7. Fallback for Country of Origin: domestic manufacturer address / postal PIN code
+    if not extracted["country_of_origin"]["found"]:
+        # In India under LM Rule §6(1)(aa), country of origin is required for imported products.
+        # For domestic products, the address of the manufacturer/marketer with postal PIN code establishes domestic Indian origin.
+        pin_match = None
+        for r in all_results:
+            t = r.get("text", "")
+            m_pin = re.search(r"\b([1-9]\d{2}\s*\d{3})\b", t)
+            if m_pin and (' ' in m_pin.group(1) or any(k in t.lower() for k in ['madurai', 'chennai', 'road', 'p.o', 'nagar', 'delhi', 'mumbai', 'pin', '-'])):
+                pin_match = m_pin.group(1)
+                break
+        fssai_match = re.search(r"\b[12]\d{13}\b", re.sub(r"\D", "", full_text))
+        indian_geo_match = re.search(
+            r"\b(madurai|chennai|mumbai|delhi|new\s*delhi|bangalore|bengaluru|kolkata|hyderabad|coimbatore|"
+            r"pennagaram|puducherry|pondicherry|ahmedabad|pune|surat|jaipur|lucknow|kanpur|nagpur|indore|"
+            r"tamil\s*nadu|kerala|karnataka|andhra\s*pradesh|telangana|maharashtra|gujarat|rajasthan|"
+            r"uttar\s*pradesh|madhya\s*pradesh|west\s*bengal|punjab|haryana|bihar|odisha|assam)\b",
+            full_text,
+            re.I
+        )
+        if pin_match or (indian_geo_match and fssai_match):
+            loc_detail = pin_match or (indian_geo_match.group(1).title() if indian_geo_match else "Domestic")
+            extracted["country_of_origin"] = {
+                "found": True,
+                "value": f"India (Domestic Product — {loc_detail})",
+                "captured": "India",
+                "confidence": 0.92,
+                "source": "domestic_address_resolver",
+                "rule": MANDATORY_FIELDS["country_of_origin"]["rule"],
+                "label": MANDATORY_FIELDS["country_of_origin"]["label"],
+                "location": "ON_PANEL"
+            }
+
+    # 8. Refinement for Manufacturer: clean up if corrupted by price/mrp
+    if extracted["manufacturer"]["found"]:
+        mfr_val = str(extracted["manufacturer"].get("value") or "")
+        if re.search(r"(?:m\.?r\.?p|rs\.?|₹|incl)", mfr_val, re.I) or len(mfr_val.strip()) < 5:
+            mfr_parts = []
+            raw_t_list = [r.get("text", "").strip() for r in all_results]
+            for i, t in enumerate(raw_t_list):
+                if re.search(r"(?:marketed|manufactured|packed|mfg)\s+by", t, re.I):
+                    if i + 1 < len(raw_t_list) and len(raw_t_list[i+1]) > 3:
+                        if not any(k in raw_t_list[i+1].lower() for k in ['m.r.p', 'rs.', 'price']):
+                            mfr_parts.append(raw_t_list[i+1])
+                    for j in range(i+1, min(i+10, len(raw_t_list))):
+                        jt = raw_t_list[j]
+                        if any(k in jt.lower() for k in ['m.r.p', 'rs.', 'customer care', 'care number', '0944', '124190']):
+                            continue
+                        if any(k in jt.lower() for k in ['ponnagar', 'pannaiyoor', 'madurai', 'road', 'p.o', 'nagar', 'industrial']) or re.search(r'\b\d{3}\s*\d{3}\b', jt):
+                            mfr_parts.append(jt)
+                    break
+            if mfr_parts:
+                clean_mfr = ", ".join(dict.fromkeys(mfr_parts))
+                extracted["manufacturer"]["value"] = clean_mfr
+                extracted["manufacturer"]["captured"] = clean_mfr
+
     return extracted, full_text, {"flap_detected": flap_detected, "pointer_text": flap_pointer_text}
+

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,21 +6,20 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
-  Modal,
   Image,
   ActivityIndicator,
   Alert,
   useWindowDimensions,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import Svg, { Path, Rect, Circle, Line } from 'react-native-svg';
+import Svg, { Path, Circle, Line } from 'react-native-svg';
 import GlassCard from '../components/GlassCard';
 import DemoBanner from '../components/DemoBanner';
 import { DEMO_MODE } from '../api/config';
 import { api } from '../api/client';
 import { color, font, space, radius } from '../theme/tokens';
 import { MergedCoverage } from '../types';
+import { captureFromDeviceCamera } from '../utils/webCameraHelper';
 
 interface Props {
   navigation: any;
@@ -31,10 +30,11 @@ export interface CapturedViewItem {
   uri: string;
   angleLabel?: string;
   analyzed?: boolean;
+  selected?: boolean;
 }
 
 /* Vector SVG Icons */
-function UploadIcon({ color: c = '#FFFFFF', size = 15 }: { color?: string; size?: number }) {
+function UploadIcon({ color: c = '#FFFFFF', size = 16 }: { color?: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -44,30 +44,11 @@ function UploadIcon({ color: c = '#FFFFFF', size = 15 }: { color?: string; size?
   );
 }
 
-function CameraIcon({ color: c = '#FFFFFF', size = 15 }: { color?: string; size?: number }) {
+function CameraIcon({ color: c = '#FFFFFF', size = 16 }: { color?: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
       <Circle cx="12" cy="13" r="4" />
-    </Svg>
-  );
-}
-
-function VideoScanIcon({ color: c = '#FFFFFF', size = 15 }: { color?: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Rect x="2" y="4" width="20" height="16" rx="3" />
-      <Path d="M2 10h20" />
-      <Circle cx="7" cy="7" r="1.5" fill={c} />
-      <Circle cx="11" cy="7" r="1.5" fill={c} />
-    </Svg>
-  );
-}
-
-function ZapIcon({ color: c = '#475569', size = 15 }: { color?: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
     </Svg>
   );
 }
@@ -104,7 +85,7 @@ export default function CaptureScreen({ navigation }: Props) {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
-  // Multi-angle session state
+  // Multi-photo session state
   const [capturedViews, setCapturedViews] = useState<CapturedViewItem[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [mergedCoverage, setMergedCoverage] = useState<MergedCoverage | null>(null);
@@ -112,21 +93,68 @@ export default function CaptureScreen({ navigation }: Props) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
-  // Live video stream modal state
-  const [isVideoScanOpen, setIsVideoScanOpen] = useState(false);
-  const [scanSide, setScanSide] = useState<'front' | 'back' | 'full'>('front');
-  const videoRef = useRef<any>(null);
-  const streamRef = useRef<any>(null);
-  const cameraRef = useRef<any>(null);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-
   // Helper: check slots left in current batch (max 6 images total)
   const remainingSlots = Math.max(0, 6 - capturedViews.length);
 
-  // 1. Pick Multiple Images from Gallery (Max 6 limit enforced)
+  // 1. Take Photo with Device Camera (works over plain HTTP on mobile browsers and native)
+  const handleTakePhoto = async () => {
+    if (remainingSlots <= 0) {
+      Alert.alert('Batch Full', 'Maximum 6 photos allowed per batch. Please analyze or remove views before adding more.');
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      try {
+        const uri = await captureFromDeviceCamera();
+        if (uri) {
+          setCapturedViews((prev) => [
+            ...prev,
+            {
+              id: `view-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              uri,
+              angleLabel: `Photo ${prev.length + 1}`,
+              analyzed: false,
+              selected: true,
+            },
+          ]);
+        }
+      } catch (e) {
+        console.warn('[CaptureScreen] Camera capture failed:', e);
+      }
+      return;
+    }
+
+    try {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to capture photos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const newView: CapturedViewItem = {
+          id: `view-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          uri: result.assets[0].uri,
+          angleLabel: `Photo ${capturedViews.length + 1}`,
+          analyzed: false,
+          selected: true,
+        };
+        setCapturedViews((prev) => [...prev, newView]);
+      }
+    } catch (e) {
+      console.warn('[CaptureScreen] Native camera capture failed:', e);
+    }
+  };
+
+  // 2. Pick Multiple Images from Gallery (up to remaining slots)
   const handlePickGallery = async () => {
     if (remainingSlots <= 0) {
-      Alert.alert('Batch Full', 'Maximum 6 views allowed per batch. Please analyze or remove existing views.');
+      Alert.alert('Batch Full', 'Maximum 6 photos allowed per batch. Please analyze or remove existing photos.');
       return;
     }
 
@@ -142,8 +170,9 @@ export default function CaptureScreen({ navigation }: Props) {
         const addedViews: CapturedViewItem[] = result.assets.slice(0, remainingSlots).map((asset, i) => ({
           id: `view-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
           uri: asset.uri,
-          angleLabel: `Angle ${capturedViews.length + i + 1}`,
+          angleLabel: `Photo ${capturedViews.length + i + 1}`,
           analyzed: false,
+          selected: true,
         }));
         setCapturedViews((prev) => [...prev, ...addedViews]);
       }
@@ -152,138 +181,7 @@ export default function CaptureScreen({ navigation }: Props) {
     }
   };
 
-  // 2. Take Live Photo via Camera (Adds to cart, does NOT navigate immediately)
-  const handleTakePhoto = async () => {
-    if (remainingSlots <= 0) {
-      Alert.alert('Batch Full', 'Maximum 6 views allowed per batch. Please analyze or remove views before adding more.');
-      return;
-    }
-
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Camera permission is required to capture live package photos.');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.85,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const newView: CapturedViewItem = {
-          id: `view-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          uri: result.assets[0].uri,
-          angleLabel: `Angle ${capturedViews.length + 1}`,
-          analyzed: false,
-        };
-        setCapturedViews((prev) => [...prev, newView]);
-      }
-    } catch (e) {
-      console.warn('[CaptureScreen] Camera capture failed:', e);
-    }
-  };
-
-  // 3. Live Video Scanner Viewfinder
-  const startLiveVideoStream = async () => {
-    if (Platform.OS !== 'web') {
-      // Native: real camera preview via expo-camera
-      let granted = Boolean(cameraPermission?.granted);
-      if (!granted) {
-        const res = await requestCameraPermission();
-        granted = Boolean(res?.granted);
-      }
-      if (!granted) {
-        Alert.alert('Permission Required', 'Camera permission is required for the live viewfinder.');
-        return;
-      }
-      setIsVideoScanOpen(true);
-      return;
-    }
-
-    setIsVideoScanOpen(true);
-    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.mediaDevices) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-        });
-        streamRef.current = stream;
-        setTimeout(() => {
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-        }, 100);
-      } catch (err) {
-        console.warn('Camera stream notice:', err);
-      }
-    }
-  };
-
-  const stopLiveVideoStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track: any) => track.stop());
-      streamRef.current = null;
-    }
-    setIsVideoScanOpen(false);
-  };
-
-  const handleCaptureVideoFrame = async () => {
-    if (remainingSlots <= 0) {
-      Alert.alert('Batch Full', 'Maximum 6 views allowed per batch. Please analyze or remove views.');
-      stopLiveVideoStream();
-      return;
-    }
-
-    let capturedUri = '';
-    if (Platform.OS === 'web' && videoRef.current) {
-      // Guard: ensure the stream is actually attached and video dimensions are ready
-      // (fixes 100ms race where srcObject may not be set yet after getUserMedia)
-      if (!videoRef.current.srcObject || videoRef.current.videoWidth === 0) {
-        Alert.alert('Camera Not Ready', 'Please wait a moment for the camera preview to load, then try again.');
-        return;
-      }
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = videoRef.current.videoWidth || 640;
-        canvas.height = videoRef.current.videoHeight || 480;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-          capturedUri = canvas.toDataURL('image/jpeg', 0.85);
-        }
-      } catch (e) {
-        console.warn('Canvas frame capture fallback', e);
-      }
-
-    } else if (Platform.OS !== 'web' && cameraRef.current) {
-      // Native: full-resolution still from the expo-camera preview
-      try {
-        const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
-        capturedUri = photo?.uri || '';
-      } catch (e) {
-        console.warn('Native frame capture failed', e);
-      }
-    }
-
-    stopLiveVideoStream();
-
-    if (capturedUri) {
-      setCapturedViews((prev) => [
-        ...prev,
-        {
-          id: `view-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          uri: capturedUri,
-          angleLabel: scanSide === 'front' ? 'Front' : scanSide === 'back' ? 'Back / MRP' : '360°',
-          analyzed: false,
-        },
-      ]);
-    }
-  };
-
-  // Remove single view from cart.
-  // If a backend session exists, discard it and reset state so the next
-  // Analyze starts a fresh session consistent with the updated cart.
+  // Remove single view from cart
   const handleRemoveView = (viewId: string) => {
     if (sessionId) {
       api.discardSession(sessionId);
@@ -298,7 +196,14 @@ export default function CaptureScreen({ navigation }: Props) {
     setCapturedViews((prev) => prev.filter((v) => v.id !== viewId));
   };
 
-  // Reset entire session (discards backend session so temp files don't linger)
+  // Tap a thumbnail to include / exclude it from the analyze batch
+  const handleToggleViewSelected = (viewId: string) => {
+    setCapturedViews((prev) =>
+      prev.map((v) => (v.id === viewId ? { ...v, selected: v.selected === false } : v))
+    );
+  };
+
+  // Reset entire session
   const handleResetSession = () => {
     if (sessionId) {
       api.discardSession(sessionId);
@@ -310,18 +215,17 @@ export default function CaptureScreen({ navigation }: Props) {
     setAnalysisError(null);
   };
 
-  // 4. Multi-Angle Analysis: upload captured views using api.scanSession()
+  // 3. Send captured photos for OCR Analysis
   const handleAnalyzeCapturedViews = async () => {
-    // Collect views to analyze (all views in cart up to 6)
-    const unanalyzed = capturedViews.filter((v) => !v.analyzed);
-    const imagesToUpload = unanalyzed.length > 0 ? unanalyzed.map((v) => v.uri) : capturedViews.map((v) => v.uri);
+    const selectedViews = capturedViews.filter((v) => v.selected !== false);
+    const imagesToUpload = selectedViews.map((v) => v.uri);
 
     if (imagesToUpload.length === 0) {
-      Alert.alert('No Images', 'Please capture or select package angles first.');
+      Alert.alert('No Photos Selected', 'Select at least one photo (tap a thumbnail to include it).');
       return;
     }
     if (imagesToUpload.length > 6) {
-      Alert.alert('Limit Exceeded', 'Maximum 6 images can be uploaded in one batch.');
+      Alert.alert('Limit Exceeded', 'Maximum 6 photos can be uploaded in one batch.');
       return;
     }
 
@@ -329,18 +233,14 @@ export default function CaptureScreen({ navigation }: Props) {
     setAnalysisError(null);
 
     try {
-      // Always await the upload/session operation before updating dependent state
       const response = await api.scanSession(imagesToUpload, sessionId || undefined);
-
       setSessionId(response.sessionId);
       setMergedCoverage(response.mergedCoverage);
       setCoverageFields(response.fields);
-      // Mark all current views as analyzed
       setCapturedViews((prev) => prev.map((v) => ({ ...v, analyzed: true })));
     } catch (err: any) {
       console.warn('[CaptureScreen] scanSession error:', err);
       if (DEMO_MODE) {
-        // Fallback for demo mode
         const demoSessId = sessionId || `demo-sess-${Date.now()}`;
         setSessionId(demoSessId);
         const isSecondBatch = capturedViews.length >= 2;
@@ -353,50 +253,30 @@ export default function CaptureScreen({ navigation }: Props) {
             : ['use_by', 'consumer_care', 'fssai', 'country_of_origin'],
           hintLine: isSecondBatch
             ? 'All mandatory statutory declarations detected across views.'
-            : 'Rotate package to scan consumer helpline, best before date, and FSSAI number.',
+            : 'Capture remaining sides for consumer helpline, best before date, and FSSAI number.',
           allFound: isSecondBatch,
         });
         setCapturedViews((prev) => prev.map((v) => ({ ...v, analyzed: true })));
       } else {
-        setAnalysisError(err?.message || 'Multi-angle scanning failed. Please check backend connection.');
-        Alert.alert('Analysis Failed', err?.message || 'Could not analyze views');
+        setAnalysisError(err?.message || 'Multi-photo scanning failed. Please check backend connection.');
+        Alert.alert('Analysis Failed', err?.message || 'Could not analyze photos');
       }
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  // 5. Finalize Session into persistent ScanRecord via ProcessingScreen
+  // 4. Finalize Session into persistent ScanRecord via ProcessingScreen
   const handleFinalizeReport = () => {
     if (!sessionId) {
-      Alert.alert('No Session', 'Please analyze views before generating audit report.');
+      Alert.alert('No Session', 'Please analyze photos before generating audit report.');
       return;
     }
     const uris = capturedViews.map((v) => v.uri);
     navigation.navigate('Processing', { sessionId, imageUris: uris });
   };
 
-  // 6. Secondary / Legacy Direct Single Scan
-  const handleQuickSingleScan = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.85,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        navigation.navigate('Processing', { imageUri: result.assets[0].uri });
-      }
-    } catch (e) {
-      navigation.navigate('Processing', { imageUri: '' });
-    }
-  };
-
-  const handleDemoScan = () => {
-    if (!DEMO_MODE) return;
-    navigation.navigate('Processing', { imageUri: '' });
-  };
-
+  const selectedCount = capturedViews.filter((v) => v.selected !== false).length;
   const unanalyzedCount = capturedViews.filter((v) => !v.analyzed).length;
   const foundCount = mergedCoverage ? mergedCoverage.found.length : 0;
   const totalMandatory = STATUTORY_DECLARATIONS.length;
@@ -418,75 +298,59 @@ export default function CaptureScreen({ navigation }: Props) {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.tagBadgeRow}>
-            <Text style={styles.tagBadge}>MULTI-ANGLE PACKAGE SCAN</Text>
+            <Text style={styles.tagBadge}>MULTI-PHOTO INSPECTION</Text>
             {sessionId && <Text style={styles.sessionActiveBadge}>Session: {sessionId.slice(0, 12)}...</Text>}
           </View>
-          <Text style={[styles.headerTitle, isMobile && { fontSize: 20 }]}>Package Angle & Panel Capture</Text>
+          <Text style={[styles.headerTitle, isMobile && { fontSize: 20 }]}>Multi-Angle Photo Capture</Text>
           <Text style={styles.headerSubtitle}>
-            Capture multiple package sides (front, back, flaps, MRP panel) to verify all 8 mandatory Legal Metrology declarations.
+            Capture photos of all package sides (front, back, MRP panel, flaps) manually, then send them together for statutory compliance OCR.
           </Text>
         </View>
 
-        {/* Capture Drop Zone Card */}
+        {/* Capture Action Card */}
         <GlassCard style={styles.dropZoneCard}>
           <View style={styles.dropZoneInner}>
             <View style={styles.iconCircle}>
-              <Text style={styles.iconCircleText}>SCAN</Text>
+              <CameraIcon color={color.primary} size={24} />
             </View>
 
-            <Text style={styles.dropTitle}>Capture Packaging Views (1 to 6)</Text>
+            <Text style={styles.dropTitle}>Capture Package Photos (1 to 6)</Text>
             <Text style={styles.dropSubtitle}>
-              Select photos from gallery or capture live package panels. Views are processed sequentially to guarantee compliance.
+              Tap "Take Photo" to snap each angle directly using your phone's camera, or pick existing photos from your gallery.
             </Text>
 
-            {/* Action Button Group */}
+            {/* Action Buttons */}
             <View style={[styles.actionButtonGroup, isMobile && styles.actionButtonGroupMobile]}>
               <TouchableOpacity
-                style={styles.cameraBtn}
+                style={[styles.cameraBtn, remainingSlots <= 0 && styles.btnDisabled]}
                 onPress={handleTakePhoto}
                 activeOpacity={0.8}
                 disabled={remainingSlots <= 0}
               >
-                <CameraIcon color="#FFFFFF" size={15} />
-                <Text style={styles.cameraBtnText}>Capture Camera Angle</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.primaryUploadBtn}
-                onPress={handlePickGallery}
-                activeOpacity={0.8}
-                disabled={remainingSlots <= 0}
-              >
-                <UploadIcon color="#FFFFFF" size={15} />
-                <Text style={styles.primaryUploadBtnText}>
-                  Choose Photos ({remainingSlots > 0 ? `Max ${remainingSlots}` : 'Full'})
+                <CameraIcon color="#FFFFFF" size={17} />
+                <Text style={styles.cameraBtnText}>
+                  Take Photo {remainingSlots > 0 ? `(${capturedViews.length}/6)` : '(Full)'}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.videoScanBtn}
-                onPress={startLiveVideoStream}
+                style={[styles.primaryUploadBtn, remainingSlots <= 0 && styles.btnDisabled]}
+                onPress={handlePickGallery}
                 activeOpacity={0.8}
                 disabled={remainingSlots <= 0}
               >
-                <VideoScanIcon color="#FFFFFF" size={15} />
-                <Text style={styles.videoScanBtnText}>Live Viewfinder</Text>
+                <UploadIcon color="#FFFFFF" size={17} />
+                <Text style={styles.primaryUploadBtnText}>
+                  Choose from Gallery
+                </Text>
               </TouchableOpacity>
             </View>
 
-            {/* Secondary Legacy / Quick Scan Link */}
-            <View style={styles.secondaryLinksRow}>
-              <TouchableOpacity onPress={handleQuickSingleScan} style={styles.secondaryLinkBtn}>
-                <Text style={styles.secondaryLinkText}>Single-Image Quick Scan (Legacy)</Text>
-              </TouchableOpacity>
-
-              {DEMO_MODE && (
-                <TouchableOpacity onPress={handleDemoScan} style={styles.demoLinkBtn}>
-                  <ZapIcon color={color.primary} size={13} />
-                  <Text style={styles.demoLinkText}>Demo Scan</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <Text style={styles.slotsHintText}>
+              {remainingSlots > 0
+                ? `${remainingSlots} more photo${remainingSlots === 1 ? '' : 's'} can be added to this batch`
+                : 'Maximum batch of 6 photos reached'}
+            </Text>
           </View>
         </GlassCard>
 
@@ -497,16 +361,16 @@ export default function CaptureScreen({ navigation }: Props) {
           </View>
         )}
 
-        {/* ── 1. CAPTURE CART (Thumbnails & Actions) ───────────────────── */}
+        {/* ── CAPTURE CART (Thumbnails & Actions) ───────────────────── */}
         {capturedViews.length > 0 && (
           <GlassCard style={styles.cartCard}>
             <View style={styles.cartHeaderRow}>
               <View>
-                <Text style={styles.cartTitle}>Captured Package Views ({capturedViews.length}/6)</Text>
+                <Text style={styles.cartTitle}>Captured Photos ({capturedViews.length}/6)</Text>
                 <Text style={styles.cartSubtitle}>
                   {unanalyzedCount > 0
-                    ? `${unanalyzedCount} new view(s) ready to analyze`
-                    : 'All captured views analyzed across package'}
+                    ? `${unanalyzedCount} new photo(s) ready to analyze`
+                    : 'All captured photos analyzed'}
                 </Text>
               </View>
 
@@ -515,58 +379,77 @@ export default function CaptureScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
 
-            {/* Thumbnails Row */}
+            {/* Thumbnail Strip */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbScrollView}>
               <View style={styles.thumbRow}>
-                {capturedViews.map((item, idx) => (
-                  <View key={item.id} style={styles.thumbContainer}>
-                    <Image source={{ uri: item.uri }} style={styles.thumbImage} resizeMode="cover" />
-                    <View style={styles.thumbLabelBar}>
-                      <Text style={styles.thumbLabelText}>{item.angleLabel || `Angle ${idx + 1}`}</Text>
-                    </View>
-
-                    {item.analyzed ? (
-                      <View style={styles.analyzedBadge}>
-                        <CheckIcon color="#FFFFFF" size={10} />
-                        <Text style={styles.analyzedBadgeText}>Done</Text>
-                      </View>
-                    ) : (
-                      <View style={styles.newBadge}>
-                        <Text style={styles.newBadgeText}>New</Text>
-                      </View>
-                    )}
-
+                {capturedViews.map((item, idx) => {
+                  const isSelected = item.selected !== false;
+                  return (
                     <TouchableOpacity
-                      style={styles.removeThumbBtn}
-                      onPress={() => handleRemoveView(item.id)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      key={item.id}
+                      style={[
+                        styles.thumbContainer,
+                        !isSelected && { opacity: 0.35 },
+                      ]}
+                      activeOpacity={0.8}
+                      onPress={() => handleToggleViewSelected(item.id)}
                     >
-                      <TrashIcon color="#FFFFFF" size={12} />
+                      <Image source={{ uri: item.uri }} style={styles.thumbImage} resizeMode="cover" />
+                      <View style={styles.thumbLabelBar}>
+                        <Text style={styles.thumbLabelText}>
+                          {item.angleLabel || `Photo ${idx + 1}`}
+                        </Text>
+                      </View>
+
+                      {item.analyzed ? (
+                        <View style={styles.analyzedBadge}>
+                          <CheckIcon color="#FFFFFF" size={10} />
+                          <Text style={styles.analyzedBadgeText}>Done</Text>
+                        </View>
+                      ) : null}
+
+                      {!isSelected && (
+                        <View style={styles.excludedBadge}>
+                          <Text style={styles.excludedBadgeText}>Excluded</Text>
+                        </View>
+                      )}
+
+                      <TouchableOpacity
+                        style={styles.removeThumbBtn}
+                        onPress={() => handleRemoveView(item.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <TrashIcon color="#FFFFFF" size={12} />
+                      </TouchableOpacity>
                     </TouchableOpacity>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             </ScrollView>
+            <Text style={styles.reviewHintText}>
+              Tap any photo to include or exclude it from OCR analysis.
+            </Text>
 
-            {/* Cart Primary Action Button */}
+            {/* Big Send for OCR Analysis Button */}
             <View style={styles.cartActionRow}>
               <TouchableOpacity
                 style={[
                   styles.analyzeCartBtn,
                   isAnalyzing && { opacity: 0.65 },
-                  capturedViews.length === 0 && { backgroundColor: color.surfaceBorder },
+                  selectedCount === 0 && styles.btnDisabled,
                 ]}
                 onPress={handleAnalyzeCapturedViews}
-                disabled={isAnalyzing || capturedViews.length === 0}
-                activeOpacity={0.8}
+                disabled={isAnalyzing || selectedCount === 0}
+                activeOpacity={0.85}
               >
                 {isAnalyzing ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <Text style={styles.analyzeCartBtnText}>Processing OCR & Statutory Rules…</Text>
+                  </View>
                 ) : (
                   <Text style={styles.analyzeCartBtnText}>
-                    {sessionId
-                      ? `Analyze & Merge Views (${capturedViews.length})`
-                      : `Analyze Captured Views (${capturedViews.length})`}
+                    Send {selectedCount} Photo{selectedCount === 1 ? '' : 's'} for OCR Analysis →
                   </Text>
                 )}
               </TouchableOpacity>
@@ -574,7 +457,7 @@ export default function CaptureScreen({ navigation }: Props) {
           </GlassCard>
         )}
 
-        {/* ── 2. LIVE MANDATORY COVERAGE UI ───────────────────────────── */}
+        {/* ── STATUTORY COVERAGE CARD ───────────────────────────── */}
         {mergedCoverage && (
           <GlassCard style={[styles.coverageCard, mergedCoverage.allFound && styles.coverageCardComplete]}>
             <View style={styles.coverageHeaderRow}>
@@ -604,7 +487,7 @@ export default function CaptureScreen({ navigation }: Props) {
               </View>
             </View>
 
-            {/* Statutory Declaration Indicators Grid */}
+            {/* Declarations Grid */}
             <View style={styles.declarationGrid}>
               {STATUTORY_DECLARATIONS.map((decl) => {
                 const isFound = mergedCoverage.found.includes(decl.key);
@@ -635,13 +518,13 @@ export default function CaptureScreen({ navigation }: Props) {
               })}
             </View>
 
-            {/* Final Action: Generate Report when all found (or user chooses to finalize) */}
+            {/* Final Action: Generate Official Audit Report */}
             <View style={styles.finalizeSection}>
               {mergedCoverage.allFound ? (
                 <View style={styles.completeBanner}>
                   <Text style={styles.completeBannerTitle}>✔ All Mandatory Declarations Detected</Text>
                   <Text style={styles.completeBannerSub}>
-                    Package meets Legal Metrology Rules, 2011. You can now finalize and generate the official audit report.
+                    Package declarations successfully verified across angles. Finalize to produce the legal audit report.
                   </Text>
                 </View>
               ) : null}
@@ -654,21 +537,17 @@ export default function CaptureScreen({ navigation }: Props) {
                 onPress={handleFinalizeReport}
                 activeOpacity={0.85}
               >
-                {isAnalyzing ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.finalizeReportBtnText}>
-                    {mergedCoverage.allFound
-                      ? 'Generate Official Audit Report →'
-                      : 'Finalize Current Inspection Report →'}
-                  </Text>
-                )}
+                <Text style={styles.finalizeReportBtnText}>
+                  {mergedCoverage.allFound
+                    ? 'Generate Official Audit Report →'
+                    : 'Finalize Current Inspection Report →'}
+                </Text>
               </TouchableOpacity>
             </View>
           </GlassCard>
         )}
 
-        {/* ── 3. STATUTORY INSPECTION CHECKLIST (Preserved) ───────────── */}
+        {/* ── STATUTORY INSPECTION CHECKLIST ───────────── */}
         <View style={styles.checklistSection}>
           <Text style={styles.checklistHeading}>STATUTORY DECLARATIONS CHECKLIST · PCR 2011</Text>
           <View style={styles.checkGrid}>
@@ -690,79 +569,6 @@ export default function CaptureScreen({ navigation }: Props) {
             </View>
           </View>
         </View>
-
-        {/* ── 4. LIVE VIDEO STREAM MODAL (Preserved) ─────────────────── */}
-        <Modal visible={isVideoScanOpen} animationType="fade" transparent={true} onRequestClose={stopLiveVideoStream}>
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={styles.liveDot} />
-                  <Text style={styles.modalTitle}>Live Package Scanner</Text>
-                </View>
-                <TouchableOpacity onPress={stopLiveVideoStream} style={styles.closeModalBtn}>
-                  <Text style={styles.closeModalText}>Close</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.videoViewport}>
-                {Platform.OS === 'web' ? (
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    style={{ width: '100%', height: 320, objectFit: 'cover', borderRadius: 12 }}
-                  />
-                ) : (
-                  <CameraView
-                    ref={cameraRef}
-                    style={StyleSheet.absoluteFill}
-                    facing="back"
-                    enableTorch={false}
-                  />
-                )}
-
-                <View style={styles.targetReticle}>
-                  <View style={[styles.corner, styles.topLeft]} />
-                  <View style={[styles.corner, styles.topRight]} />
-                  <View style={[styles.corner, styles.bottomLeft]} />
-                  <View style={[styles.corner, styles.bottomRight]} />
-                  <Text style={styles.reticleBadge}>AIM AT PACKAGE PANEL</Text>
-                </View>
-              </View>
-
-              <View style={styles.sideSelectorRow}>
-                <TouchableOpacity
-                  style={[styles.sideChip, scanSide === 'front' && styles.sideChipActive]}
-                  onPress={() => setScanSide('front')}
-                >
-                  <Text style={[styles.sideChipText, scanSide === 'front' && styles.sideChipTextActive]}>Front Panel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.sideChip, scanSide === 'back' && styles.sideChipActive]}
-                  onPress={() => setScanSide('back')}
-                >
-                  <Text style={[styles.sideChipText, scanSide === 'back' && styles.sideChipTextActive]}>Back / MRP</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.sideChip, scanSide === 'full' && styles.sideChipActive]}
-                  onPress={() => setScanSide('full')}
-                >
-                  <Text style={[styles.sideChipText, scanSide === 'full' && styles.sideChipTextActive]}>360° View</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.modalActionRow}>
-                <TouchableOpacity style={styles.captureFrameBtn} onPress={handleCaptureVideoFrame} activeOpacity={0.85}>
-                  <Text style={styles.captureFrameBtnText}>Add View to Cart ({remainingSlots} left)</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
       </ScrollView>
     </View>
   );
@@ -781,6 +587,7 @@ const styles = StyleSheet.create({
   },
   mobileContent: {
     padding: space.md,
+    paddingBottom: 96,
   },
   navHeader: {
     marginBottom: space.sm,
@@ -840,8 +647,7 @@ const styles = StyleSheet.create({
     padding: space.xl,
     borderRadius: radius.xl,
     marginBottom: space.lg,
-    borderStyle: 'dashed',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: color.primaryBorder,
     backgroundColor: color.surface,
   },
@@ -858,11 +664,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: space.md,
-  },
-  iconCircleText: {
-    fontSize: 11,
-    fontWeight: font.weight.bold,
-    color: color.primary,
   },
   dropTitle: {
     fontSize: font.size.lg,
@@ -882,9 +683,10 @@ const styles = StyleSheet.create({
   actionButtonGroup: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: space.sm,
+    gap: space.md,
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%',
   },
   actionButtonGroupMobile: {
     flexDirection: 'column',
@@ -893,74 +695,54 @@ const styles = StyleSheet.create({
   },
   cameraBtn: {
     backgroundColor: '#059669',
-    paddingHorizontal: space.lg,
+    paddingHorizontal: space.xl,
     paddingVertical: space.md,
     borderRadius: radius.full,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
+    minWidth: 200,
+    elevation: 2,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   cameraBtnText: {
     color: '#FFFFFF',
-    fontWeight: font.weight.semibold,
-    fontSize: font.size.sm,
+    fontWeight: font.weight.bold,
+    fontSize: font.size.base,
   },
   primaryUploadBtn: {
     backgroundColor: color.primary,
-    paddingHorizontal: space.lg,
+    paddingHorizontal: space.xl,
     paddingVertical: space.md,
     borderRadius: radius.full,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
+    minWidth: 200,
+    elevation: 2,
+    shadowColor: color.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   primaryUploadBtnText: {
     color: color.inkInverse,
-    fontWeight: font.weight.semibold,
-    fontSize: font.size.sm,
+    fontWeight: font.weight.bold,
+    fontSize: font.size.base,
   },
-  videoScanBtn: {
-    backgroundColor: '#4F46E5',
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    borderRadius: radius.full,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+  btnDisabled: {
+    opacity: 0.45,
   },
-  videoScanBtnText: {
-    color: '#FFFFFF',
-    fontWeight: font.weight.semibold,
-    fontSize: font.size.sm,
-  },
-  secondaryLinksRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.lg,
-    marginTop: space.lg,
-  },
-  secondaryLinkBtn: {
-    paddingVertical: space.xs,
-  },
-  secondaryLinkText: {
+  slotsHintText: {
     fontSize: font.size.xs,
     color: color.inkMuted,
-    textDecorationLine: 'underline',
-  },
-  demoLinkBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: space.xs,
-  },
-  demoLinkText: {
-    fontSize: font.size.xs,
-    color: color.primary,
-    fontWeight: font.weight.semibold,
+    marginTop: space.md,
+    textAlign: 'center',
   },
   errorBanner: {
     backgroundColor: '#FEE2E2',
@@ -1004,7 +786,7 @@ const styles = StyleSheet.create({
   resetBtnText: {
     fontSize: font.size.xs,
     color: '#EF4444',
-    fontWeight: font.weight.medium,
+    fontWeight: font.weight.semibold,
   },
   thumbScrollView: {
     marginBottom: space.md,
@@ -1059,30 +841,35 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: font.weight.bold,
   },
-  newBadge: {
-    position: 'absolute',
-    top: 6,
-    left: 6,
-    backgroundColor: color.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: radius.full,
-  },
-  newBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: font.weight.bold,
-  },
   removeThumbBtn: {
     position: 'absolute',
     top: 6,
     right: 6,
     backgroundColor: 'rgba(239, 68, 68, 0.9)',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  excludedBadge: {
+    position: 'absolute',
+    bottom: 22,
+    left: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  excludedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: font.weight.bold,
+  },
+  reviewHintText: {
+    fontSize: font.size.xs,
+    color: color.inkMuted,
+    marginBottom: space.md,
   },
   cartActionRow: {
     marginTop: space.xs,
@@ -1093,11 +880,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 3,
+    shadowColor: color.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
   analyzeCartBtnText: {
     color: '#FFFFFF',
     fontWeight: font.weight.bold,
-    fontSize: font.size.sm,
+    fontSize: font.size.base,
   },
 
   /* Coverage UI Styles */
@@ -1241,7 +1033,7 @@ const styles = StyleSheet.create({
     fontSize: font.size.sm,
   },
 
-  /* Checklist Styles (Preserved) */
+  /* Checklist Styles */
   checklistSection: {
     marginTop: space.sm,
   },
@@ -1278,153 +1070,5 @@ const styles = StyleSheet.create({
     fontWeight: font.weight.medium,
     color: color.ink,
     flex: 1,
-  },
-
-  /* Video Modal Styles (Preserved) */
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: space.md,
-  },
-  modalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: radius.xl,
-    padding: space.lg,
-    width: '100%',
-    maxWidth: 640,
-    elevation: 10,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: space.md,
-  },
-  liveDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#EF4444',
-  },
-  modalTitle: {
-    fontSize: font.size.lg,
-    fontWeight: font.weight.bold,
-    color: color.ink,
-  },
-  closeModalBtn: {
-    padding: space.xs,
-  },
-  closeModalText: {
-    fontSize: font.size.sm,
-    fontWeight: font.weight.semibold,
-    color: color.inkMuted,
-  },
-  videoViewport: {
-    height: 320,
-    backgroundColor: '#0F172A',
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  targetReticle: {
-    position: 'absolute',
-    top: 40,
-    bottom: 40,
-    left: 40,
-    right: 40,
-    borderWidth: 1.5,
-    borderColor: 'rgba(59, 130, 246, 0.6)',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  reticleBadge: {
-    backgroundColor: 'rgba(37, 99, 235, 0.85)',
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: font.weight.bold,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.full,
-    position: 'absolute',
-    top: 12,
-  },
-  corner: {
-    position: 'absolute',
-    width: 20,
-    height: 20,
-    borderColor: '#3B82F6',
-  },
-  topLeft: {
-    top: -2,
-    left: -2,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-  },
-  topRight: {
-    top: -2,
-    right: -2,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-  },
-  bottomLeft: {
-    bottom: -2,
-    left: -2,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-  },
-  bottomRight: {
-    bottom: -2,
-    right: -2,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-  },
-  sideSelectorRow: {
-    flexDirection: 'row',
-    gap: space.xs,
-    justifyContent: 'center',
-    marginVertical: space.md,
-  },
-  sideChip: {
-    paddingHorizontal: space.md,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-    backgroundColor: color.surfaceHover,
-    borderWidth: 1,
-    borderColor: color.surfaceBorder,
-  },
-  sideChipActive: {
-    backgroundColor: color.primaryLight,
-    borderColor: color.primaryBorder,
-  },
-  sideChipText: {
-    fontSize: font.size.xs,
-    color: color.inkSecondary,
-    fontWeight: font.weight.medium,
-  },
-  sideChipTextActive: {
-    color: color.primary,
-    fontWeight: font.weight.bold,
-  },
-  modalActionRow: {
-    alignItems: 'center',
-    marginTop: space.xs,
-  },
-  captureFrameBtn: {
-    backgroundColor: color.primary,
-    paddingHorizontal: space.xxl,
-    paddingVertical: space.md,
-    borderRadius: radius.full,
-    width: '100%',
-    alignItems: 'center',
-  },
-  captureFrameBtnText: {
-    color: '#FFFFFF',
-    fontWeight: font.weight.bold,
-    fontSize: font.size.base,
   },
 });

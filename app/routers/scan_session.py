@@ -308,7 +308,10 @@ async def process_session_views(
             quality["issues"].append(f"High glare detected ({glare_ratio:.1%})")
 
         # Strict sequential execution: wait for current view to finish before starting the next
-        report = await loop.run_in_executor(None, ensemble_scan, img_path)
+        report = await loop.run_in_executor(
+            None,
+            lambda p=img_path: ensemble_scan(p, session_mode=True),
+        )
         elapsed_sec = round(time.time() - t_start, 2)
 
         annotated_name = f"ensemble_{item['base']}_result.png"
