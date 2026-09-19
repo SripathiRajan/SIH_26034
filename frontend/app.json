@@ -20,6 +20,7 @@
       }
     },
     "android": {
+      "package": "com.praman.app",
       "permissions": ["CAMERA"]
     },
     "plugins": [
