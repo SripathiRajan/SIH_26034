@@ -8,6 +8,7 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (identifier: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  loginDemo: () => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: OfficerUser | null) => void;
 }
@@ -66,6 +67,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: false, error: res.error || 'Authentication failed' };
   };
 
+  const loginDemo = async () => {
+    const demoOfficer: OfficerUser = {
+      id: 'officer-demo',
+      name: 'Insp. R. Sharma',
+      role: 'officer',
+      department: 'Legal Metrology Dept, Delhi',
+      zone: 'North Zone',
+      badgeId: 'LM-DL-8821',
+    };
+    setCurrentUser(demoOfficer);
+    await appStorage.setItem(AUTH_USER_KEY, JSON.stringify(demoOfficer));
+  };
+
   const logout = async () => {
     setCurrentUser(null);
     setToken(null);
@@ -84,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, token, isLoading, login, logout, setUser }}>
+    <AuthContext.Provider value={{ currentUser, token, isLoading, login, loginDemo, logout, setUser }}>
       {children}
     </AuthContext.Provider>
   );

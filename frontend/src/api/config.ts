@@ -8,13 +8,27 @@ import { Platform } from 'react-native';
  * - Android Emulator: http://10.0.2.2:8000
  * - Physical Device (Expo Go): Replace with your machine's LAN IP (e.g., http://192.168.1.5:8000)
  */
-export const API_CONFIG = {
-  // Supports EXPO_PUBLIC_API_URL env variable or platform defaults
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL || Platform.select({
+const getBaseUrl = (): string => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  // On web, if accessed from a remote device or mobile phone browser, point to the host machine's port 8000
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
+    const host = window.location.hostname;
+    if (host !== 'localhost' && host !== '127.0.0.1') {
+      const protocol = window.location.protocol || 'http:';
+      return `${protocol}//${host}:8000`;
+    }
+  }
+  return (Platform.select({
     android: 'http://10.0.2.2:8000',
     ios: 'http://localhost:8000',
     default: 'http://localhost:8000',
-  }),
+  }) as string);
+};
+
+export const API_CONFIG = {
+  BASE_URL: getBaseUrl(),
   TIMEOUT_MS: 15000,
   ENDPOINTS: {
     HEALTH: '/health',

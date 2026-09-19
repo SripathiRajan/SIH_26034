@@ -7,7 +7,10 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "web:dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 expo start --web --port 8081",
+    "web:lan": "cross-env NODE_OPTIONS=--max-old-space-size=4096 expo start --port 8081",
+    "export": "expo export --platform web"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.3",
@@ -35,6 +38,7 @@
   "devDependencies": {
     "@babel/core": "^7.24.0",
     "@types/react": "~18.2.79",
+    "cross-env": "^10.1.0",
     "typescript": "~5.3.3"
   }
 }

@@ -44,7 +44,7 @@ function LockIcon({ color = pramanColor.mutedText }: { color?: string }) {
 }
 
 export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
-  const { login } = useAuth();
+  const { login, loginDemo } = useAuth();
   const [selectedRole, setSelectedRole] = useState<UserRole>('officer');
   const [officerId, setOfficerId] = useState('');
   const [password, setPassword] = useState('');
@@ -165,7 +165,20 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
               onSubmitEditing={handleSignIn}
             />
 
-            {errors.form ? <Text style={styles.formErrorText}>{errors.form}</Text> : null}
+            {errors.form ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.formErrorText}>{errors.form}</Text>
+                <TouchableOpacity
+                  style={styles.demoModeButton}
+                  onPress={async () => {
+                    await loginDemo();
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.demoModeButtonText}>⚡ Explore in Offline Demo Mode</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
 
             {/* Primary Sign In Button */}
             <PrimaryButton
@@ -184,6 +197,18 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
                 activeOpacity={0.7}
               >
                 <Text style={styles.signupLink}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Fast Demo Access */}
+            <View style={styles.demoRow}>
+              <TouchableOpacity
+                onPress={async () => {
+                  await loginDemo();
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.demoLink}>⚡ Or test directly in Offline Demo Mode</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -239,5 +264,36 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: pramanColor.primaryBlue,
     textDecorationLine: 'underline',
+  },
+  errorContainer: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 14,
+    alignItems: 'center',
+  },
+  demoModeButton: {
+    marginTop: 8,
+    backgroundColor: pramanColor.primaryBlue,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+  },
+  demoModeButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 12.5,
+  },
+  demoRow: {
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  demoLink: {
+    fontFamily: pramanFont.body,
+    fontSize: 12.5,
+    color: pramanColor.primaryBlue,
+    fontWeight: '600',
   },
 });
