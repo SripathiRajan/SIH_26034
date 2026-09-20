@@ -1,6 +1,6 @@
 import os
 import sqlite3
-import requests
+import httpx
 import json
 import re
 from typing import Optional, Dict, Any
@@ -140,7 +140,7 @@ def lookup_gtin(barcode: str) -> Dict[str, Any]:
 
     for attempt in range(2):
         try:
-            resp = requests.get(url, headers=headers, timeout=5)
+            resp = httpx.get(url, headers=headers, timeout=5.0)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("status") == 1 and "product" in data:
