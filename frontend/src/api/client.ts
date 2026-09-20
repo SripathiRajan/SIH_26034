@@ -52,6 +52,9 @@ class ApiClient {
     try {
       return await fetch(primaryUrl, init);
     } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        throw err;
+      }
       const altBase = this.getAlternatePortUrl();
       if (altBase && !urlPath.startsWith('http')) {
         try {

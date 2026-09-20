@@ -26,9 +26,9 @@ const getBaseUrl = (): string => {
     return `${protocol}//localhost:8000`;
   }
   return (Platform.select({
-    android: 'http://10.0.2.2:8001',
-    ios: 'http://localhost:8001',
-    default: 'http://localhost:8001',
+    android: 'http://10.0.2.2:8000',
+    ios: 'http://localhost:8000',
+    default: 'http://localhost:8000',
   }) as string);
 };
 
