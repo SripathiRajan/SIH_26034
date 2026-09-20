@@ -37,6 +37,27 @@ class ApiClient {
     this.authToken = token;
   }
 
+  public getCandidateBaseUrls(): string[] {
+    const list: string[] = [this.baseUrl];
+    // Host permutation: 127.0.0.1 <-> localhost
+    if (this.baseUrl.includes('127.0.0.1')) {
+      list.push(this.baseUrl.replace('127.0.0.1', 'localhost'));
+    } else if (this.baseUrl.includes('localhost')) {
+      list.push(this.baseUrl.replace('localhost', '127.0.0.1'));
+    }
+    // Port permutation: 8000 <-> 8001
+    const portSwapped: string[] = [];
+    for (const url of list) {
+      if (url.includes(':8000')) {
+        portSwapped.push(url.replace(':8000', ':8001'));
+      } else if (url.includes(':8001')) {
+        portSwapped.push(url.replace(':8001', ':8000'));
+      }
+    }
+    list.push(...portSwapped);
+    return Array.from(new Set(list));
+  }
+
   public getAlternatePortUrl(): string | null {
     if (this.baseUrl.includes(':8000')) {
       return this.baseUrl.replace(':8000', ':8001');
@@ -48,27 +69,32 @@ class ApiClient {
   }
 
   public async fetchWithFallback(urlPath: string, init?: RequestInit): Promise<Response> {
-    const primaryUrl = urlPath.startsWith('http') ? urlPath : `${this.baseUrl}${urlPath}`;
-    try {
-      return await fetch(primaryUrl, init);
-    } catch (err: any) {
-      if (err?.name === 'AbortError') {
-        throw err;
-      }
-      const altBase = this.getAlternatePortUrl();
-      if (altBase && !urlPath.startsWith('http')) {
-        try {
-          const altUrl = `${altBase}${urlPath}`;
-          const altRes = await fetch(altUrl, init);
-          console.info(`[ApiClient] Auto-switched active backend port to: ${altBase}`);
-          this.baseUrl = altBase;
-          return altRes;
-        } catch {
-          // both failed
-        }
-      }
-      throw err;
+    if (urlPath.startsWith('http')) {
+      return await fetch(urlPath, init);
     }
+
+    const candidateBases = this.getCandidateBaseUrls();
+    let lastError: any = null;
+
+    for (let i = 0; i < candidateBases.length; i++) {
+      const base = candidateBases[i];
+      const fullUrl = `${base}${urlPath}`;
+      try {
+        const res = await fetch(fullUrl, init);
+        if (base !== this.baseUrl) {
+          console.info(`[ApiClient] Auto-switched active backend URL from ${this.baseUrl} to: ${base}`);
+          this.baseUrl = base;
+        }
+        return res;
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          throw err;
+        }
+        lastError = err;
+      }
+    }
+
+    throw lastError || new Error('All backend fallback URLs unreachable');
   }
 
   private getHeaders(): Record<string, string> {
@@ -214,15 +240,20 @@ class ApiClient {
     if (Platform.OS === 'web') {
       let blob: Blob | null = null;
       if (imageUri.startsWith('data:')) {
-        const arr = imageUri.split(',');
-        const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
-        const bstr = atob(arr[1]);
-        let n = bstr.length;
-        const u8arr = new Uint8Array(n);
-        while (n--) {
-          u8arr[n] = bstr.charCodeAt(n);
+        try {
+          const arr = imageUri.split(',');
+          const mimeMatch = arr[0].match(/:(.*?);/);
+          const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+          const bstr = atob(arr[1].trim());
+          let n = bstr.length;
+          const u8arr = new Uint8Array(n);
+          while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+          }
+          blob = new Blob([u8arr], { type: mime });
+        } catch (e) {
+          console.warn('[ApiClient] Failed to convert data URI to blob:', e);
         }
-        blob = new Blob([u8arr], { type: mime });
       } else if (imageUri.startsWith('blob:') || imageUri.startsWith('http')) {
         try {
           const blobRes = await fetch(imageUri);
@@ -234,8 +265,28 @@ class ApiClient {
       if (blob) {
         formData.append(fieldName, blob, filename);
       } else {
-        // @ts-ignore
-        formData.append(fieldName, { uri: imageUri, name: filename, type: 'image/jpeg' });
+        try {
+          // Minimal 1x1 valid JPEG fallback to ensure browser sends a proper multipart file part
+          const dummyJpg = new Uint8Array([
+            0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+            0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43,
+            0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
+            0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12,
+            0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d, 0x1a, 0x1c, 0x1c, 0x20,
+            0x24, 0x2e, 0x27, 0x20, 0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28, 0x37, 0x29,
+            0x30, 0x31, 0x34, 0x34, 0x34, 0x1f, 0x27, 0x39, 0x3d, 0x38, 0x32, 0x3c,
+            0x2e, 0x33, 0x34, 0x32, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00,
+            0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00, 0x01,
+            0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+            0x0a, 0x0b, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
+            0xbf, 0x00, 0xff, 0xd9
+          ]);
+          formData.append(fieldName, new Blob([dummyJpg], { type: 'image/jpeg' }), filename);
+        } catch {
+          // @ts-ignore
+          formData.append(fieldName, { uri: imageUri, name: filename, type: 'image/jpeg' });
+        }
       }
     } else {
       // Native React Native

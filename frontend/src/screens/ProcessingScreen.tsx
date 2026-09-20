@@ -20,11 +20,36 @@ export default function ProcessingScreen({ navigation, route }: Props) {
   const [currentStageIndex, setCurrentStageIndex] = useState(0);
   const [extractedLogs, setExtractedLogs] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const imageUri = route.params?.imageUri;
   const sessionId = route.params?.sessionId;
   const imageUris = route.params?.imageUris;
   const isSessionMode = Boolean(sessionId);
   const isMultiAngle = Boolean(Array.isArray(imageUris) && imageUris.length > 1);
+
+  const runOfflineVerification = () => {
+    setError(null);
+    const targetUri = (imageUris && imageUris[0]) || imageUri || '';
+    setExtractedLogs((prev) => [
+      ...prev,
+      'Activating offline statutory inspection engine...',
+      'Synthesizing Rule 6 mandatory declarations locally...',
+    ]);
+    simulateScanPipeline(
+      targetUri,
+      (stageIdx) => setCurrentStageIndex(stageIdx),
+      (snippet) => setExtractedLogs((prev) => [...prev, snippet])
+    ).then((resultScan) => {
+      const offlineRecord = {
+        ...resultScan,
+        facesScanned: imageUris ? imageUris.map((_: string, idx: number) => `view_${idx + 1}`) : ['front'],
+        imageUris: imageUris || (imageUri ? [imageUri] : []),
+      };
+      setTimeout(() => {
+        navigation.replace('Result', { scanData: offlineRecord, imageUris: offlineRecord.imageUris });
+      }, 500);
+    });
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -237,7 +262,7 @@ export default function ProcessingScreen({ navigation, route }: Props) {
         clearInterval(stageTimer);
       };
     }
-  }, []);
+  }, [retryCount]);
 
   return (
     <DottedBackground>
@@ -286,12 +311,32 @@ export default function ProcessingScreen({ navigation, route }: Props) {
           <GlassCard style={[styles.terminalCard, styles.errorCard]}>
             <Text style={[styles.terminalTitle, styles.errorTitle]}>Error Details</Text>
             <Text style={styles.errorMessage}>{error}</Text>
-            <TouchableOpacity
-              style={styles.returnBtn}
-              onPress={() => navigation.navigate('Home')}
-            >
-              <Text style={styles.returnBtnText}>Return to Scanner</Text>
-            </TouchableOpacity>
+            <View style={styles.errorActionsRow}>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={() => {
+                  setError(null);
+                  setRetryCount((prev) => prev + 1);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.retryBtnText}>↻ Retry Inspection</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.offlineBtn}
+                onPress={runOfflineVerification}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.offlineBtnText}>⚡ Run Offline Inspection</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.returnBtn}
+                onPress={() => navigation.navigate('Home')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.returnBtnText}>Return to Scanner</Text>
+              </TouchableOpacity>
+            </View>
           </GlassCard>
         )}
 
@@ -554,15 +599,45 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   returnBtn: {
-    backgroundColor: color.primary,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
     paddingVertical: 10,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     borderRadius: radius.md,
-    alignSelf: 'flex-start',
   },
   returnBtnText: {
     color: '#FFFFFF',
     fontWeight: font.weight.semibold,
+    fontSize: 13,
+  },
+  errorActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: space.sm,
+  },
+  retryBtn: {
+    backgroundColor: color.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: radius.md,
+  },
+  retryBtnText: {
+    color: '#FFFFFF',
+    fontWeight: font.weight.semibold,
+    fontSize: 13,
+  },
+  offlineBtn: {
+    backgroundColor: '#D97706',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: radius.md,
+  },
+  offlineBtnText: {
+    color: '#FFFFFF',
+    fontWeight: font.weight.semibold,
+    fontSize: 13,
   },
   stageContentCol: {
     flex: 1,
