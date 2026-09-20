@@ -3,8 +3,11 @@ title: PRAMAN v4 Backend
 emoji: ⚖️
 colorFrom: blue
 colorTo: indigo
-sdk: docker
-app_port: 7860
+sdk: gradio
+sdk_version: 4.44.0
+python_version: 3.11
+app_file: app.py
+pinned: false
 ---
 
 # PRAMAN v4 — Legal Metrology AI Inspection System
