@@ -33,4 +33,6 @@ faiss-cpu>=1.8.0              # activates real FAISS vector search
 sentence-transformers>=3.0.0  # multilingual MiniLM (Hindi + English)
 google-genai>=0.1.1           # Official Google GenAI Python SDK
 httpx>=0.27.0                 # Groq OpenAI-compatible chat completions client
+gradio>=4.0.0
+
 
