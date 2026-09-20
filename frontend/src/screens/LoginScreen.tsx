@@ -46,8 +46,8 @@ function LockIcon({ color = pramanColor.mutedText }: { color?: string }) {
 export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
   const { login, loginDemo } = useAuth();
   const [selectedRole, setSelectedRole] = useState<UserRole>('officer');
-  const [officerId, setOfficerId] = useState('');
-  const [password, setPassword] = useState('');
+  const [officerId, setOfficerId] = useState('admin');
+  const [password, setPassword] = useState('Praman!2026');
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ officerId?: string; password?: string; form?: string }>({});
 
@@ -132,6 +132,36 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
 
             {/* Role Selection Segmented Control */}
             <RoleTabs selectedRole={selectedRole} onSelectRole={setSelectedRole} />
+
+            {/* 1-Click Demo Entry (No Sign-In Required) */}
+            <TouchableOpacity
+              style={styles.directDemoButton}
+              onPress={async () => {
+                await loginDemo();
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.directDemoButtonText}>⚡ Explore Full Demo (No Sign-In Required)</Text>
+            </TouchableOpacity>
+
+            {/* Preset Admin Credentials Callout */}
+            <TouchableOpacity
+              style={styles.credentialsBadge}
+              onPress={() => {
+                setOfficerId('admin');
+                setPassword('Praman!2026');
+                setSelectedRole('admin');
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={styles.badgeHeaderRow}>
+                <Text style={styles.badgeTitle}>🔐 Preset Demo Credentials</Text>
+                <Text style={styles.badgeAutoFill}>Tap to Auto-Fill</Text>
+              </View>
+              <Text style={styles.badgeDetails}>
+                Username: <Text style={styles.badgeBold}>admin</Text>   |   Password: <Text style={styles.badgeBold}>Praman!2026</Text>
+              </Text>
+            </TouchableOpacity>
 
             {/* Input 1: Officer ID / Badge Number */}
             <CustomInput
@@ -295,5 +325,54 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: pramanColor.primaryBlue,
     fontWeight: '600',
+  },
+  directDemoButton: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+    borderRadius: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  directDemoButtonText: {
+    fontFamily: pramanFont.body,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#4338CA',
+    letterSpacing: -0.1,
+  },
+  credentialsBadge: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 16,
+  },
+  badgeHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  badgeTitle: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  badgeAutoFill: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: pramanColor.primaryBlue,
+  },
+  badgeDetails: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  badgeBold: {
+    fontWeight: '700',
+    color: '#0F172A',
   },
 });

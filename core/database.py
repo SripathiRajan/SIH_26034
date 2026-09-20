@@ -36,3 +36,30 @@ def create_tables():
                 conn.commit()
             except Exception:
                 pass
+
+    # Ensure default admin user exists: admin / Praman!2026
+    try:
+        from core.auth import hash_password
+        import uuid
+        db = SessionLocal()
+        admin_user = db.query(UserDB).filter(UserDB.username == "admin").first()
+        if not admin_user:
+            db.add(UserDB(
+                id=uuid.uuid4().hex,
+                username="admin",
+                email="admin@praman.gov.in",
+                hashed_password=hash_password("Praman!2026"),
+                full_name="Administrator",
+                role="admin",
+            ))
+            db.commit()
+        else:
+            admin_user.hashed_password = hash_password("Praman!2026")
+            db.commit()
+    except Exception:
+        pass
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
