@@ -3,6 +3,7 @@ Legacy Endpoints Router
 Provides /health and / index status endpoints.
 """
 
+import os
 import socket
 import time
 
@@ -36,7 +37,7 @@ def health_check():
         "engines": ["paddleocr", "easyocr", "surya", "vlm"],
         "server_time": time.time(),
         "host_ip": get_local_ip(),
-        "port": 8000,
+        "port": int(os.environ.get("PORT", 8000)),
     }
 
 

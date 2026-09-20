@@ -13,7 +13,9 @@ except ImportError:
 try:
     import torch
     num_cpus = os.cpu_count() or 4
-    torch.set_num_threads(num_cpus)
+    # OMP_NUM_THREADS=1 is set below for OpenMP/DLL stability; raise torch's
+    # intra-op pool deliberately, capped so constrained cloud SKUs don't oversubscribe.
+    torch.set_num_threads(int(os.environ.get("TORCH_NUM_THREADS", min(num_cpus, 4))))
     USE_GPU = torch.cuda.is_available()
 except Exception:
     torch = None
@@ -75,10 +77,15 @@ GROQ_API_BASE = os.environ.get("GROQ_API_BASE", "https://api.groq.com/openai/v1"
 
 # JWT Auth & Security
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
+_DEV_ENVIRONMENTS = ("development", "dev", "test", "local")
 
-SECRET_KEY = os.environ.get("PRAMAN_SECRET_KEY", "praman-dev-secret-CHANGE-IN-PROD")
-if ENVIRONMENT == "production" and SECRET_KEY == "praman-dev-secret-CHANGE-IN-PROD":
-    raise ValueError("PRAMAN_SECRET_KEY must be configured with a secure random key when ENVIRONMENT=production")
+_DEFAULT_SECRET = "praman-dev-secret-CHANGE-IN-PROD"
+SECRET_KEY = os.environ.get("PRAMAN_SECRET_KEY", _DEFAULT_SECRET)
+if ENVIRONMENT not in _DEV_ENVIRONMENTS and SECRET_KEY == _DEFAULT_SECRET:
+    raise ValueError(
+        f"PRAMAN_SECRET_KEY must be set to a secure random key when ENVIRONMENT={ENVIRONMENT!r} "
+        "(any non-development environment refuses the default signing key)"
+    )
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours

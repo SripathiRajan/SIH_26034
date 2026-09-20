@@ -129,22 +129,7 @@ async def analyze_package_image(
 
     try:
         # 1. Barcode GTIN cross-check
-        gtin_data = None
-        if gtin:
-            pm = db.query(ProductMasterDB).filter(ProductMasterDB.gtin == gtin).first()
-            if pm:
-                gtin_data = {
-                    "found": True,
-                    "gtin": gtin,
-                    "brand": pm.brand,
-                    "product_name": pm.product_name,
-                    "net_weight": pm.standard_net_quantity or pm.net_quantity,
-                    "mrp": pm.expected_mrp_max or pm.standard_mrp,
-                }
-            else:
-                gtin_data = gtin_lookup.lookup_gtin(gtin)
-                if gtin_data and "gtin" not in gtin_data:
-                    gtin_data["gtin"] = gtin
+        gtin_data = gtin_lookup.resolve_gtin_metadata(db, gtin)
 
         # 2. Parallel cascaded OCR scan
         loop = asyncio.get_running_loop()
@@ -155,27 +140,10 @@ async def analyze_package_image(
 
         # 3. Auto-detect GTIN from OCR tokens if not explicitly provided
         if not gtin and not gtin_data:
-            tokens = report.get("raw_ocr_tokens") or []
-            ft = report.get("full_text") or ""
-            if ft:
-                tokens = list(tokens) + ft.split("\n")
-            detected_gtin = gtin_lookup.find_gtin_in_tokens(tokens)
+            detected_gtin, detected_data = gtin_lookup.auto_detect_gtin_metadata(db, report)
             if detected_gtin:
                 gtin = detected_gtin
-                pm = db.query(ProductMasterDB).filter(ProductMasterDB.gtin == gtin).first()
-                if pm:
-                    gtin_data = {
-                        "found": True,
-                        "gtin": gtin,
-                        "brand": pm.brand,
-                        "product_name": pm.product_name,
-                        "net_weight": pm.standard_net_quantity or pm.net_quantity,
-                        "mrp": pm.expected_mrp_max or pm.standard_mrp,
-                    }
-                else:
-                    gtin_data = gtin_lookup.lookup_gtin(gtin)
-                    if gtin_data and "gtin" not in gtin_data:
-                        gtin_data["gtin"] = gtin
+                gtin_data = detected_data
 
         # 4. Check for annotated image
         annotated_name = f"ensemble_{scan_id}_result.png"
@@ -210,8 +178,8 @@ async def analyze_package_image(
         return scan_record
 
     except Exception as e:
-        logger.error(f"[/api/analyze] Scan failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Scan processing failed: {str(e)}")
+        logger.error(f"[/api/analyze] Scan failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Scan processing failed. Please retry or contact support.")
 
 
 

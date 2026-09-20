@@ -160,9 +160,19 @@ class RAGAssistant:
         if self._client is not None:
             try:
                 prompt = self._build_prompt(query, context, scan_context=scan_context)
+                config = None
+                try:
+                    from google.genai import types
+                    config = types.GenerateContentConfig(
+                        temperature=0.2,
+                        max_output_tokens=2048,
+                    )
+                except Exception:
+                    pass
                 response = self._client.models.generate_content(
                     model=settings.GEMINI_MODEL,
                     contents=prompt,
+                    config=config,
                 )
                 if response and hasattr(response, "text") and response.text:
                     return {
@@ -193,12 +203,25 @@ class RAGAssistant:
             f"{scan_sec}"
             f"User Question: \"{query}\"\n\n"
             f"Statutory Context & Gazette Provisions:\n{context}\n\n"
-            "Instructions:\n"
-            "- If active inspection data is provided above, refer directly to this specific product, its declarations, detected issues (e.g. flap pointers, missing details), and captured images.\n"
-            "- Provide a clear, authoritative, and concise compliance answer based strictly on the statutory provisions and gazette rules above.\n"
-            "- Cite the relevant Rule numbers (e.g. Rule 6(1)(e), Rule 6(2), Section 36) and gazette notifications where applicable.\n"
-            "- If a declaration is pointed to the bottom flap (e.g. 'See bottom of pack'), explain that photographing the bottom face is permitted and required under Rule 6 to verify the printed stamp.\n"
-            "- If the context does not fully answer the question, state what the rules specify and clarify the limits."
+            "MANDATORY INSTRUCTIONS:\n"
+            "1. LANGUAGE: Respond EXCLUSIVELY in clear, professional English. NEVER output Hindi/Devanagari text (e.g. do NOT output 'ग्रुप पैकेज', '(ट, ख)', or Hindi gazette quotes), even if the retrieved gazette context contains Hindi. Always use official English statutory terms and official English gazette text.\n"
+            "2. FORMATTING & NEATNESS:\n"
+            "   - Format the response cleanly and elegantly with clear section headings, structured bullet points, and highlighted key terms.\n"
+            "   - If classifying packaging types or presenting structured comparisons, use clean structured definition blocks or well-aligned markdown tables.\n"
+            "   - For each classification category, clearly state:\n"
+            "     * Pack Classification Name\n"
+            "     * Defining Criteria & Characteristics\n"
+            "     * Relevant Statutory Provision (Rule & Gazette citation in English)\n"
+            "     * Official Gazette Illustrations / Practical Examples\n"
+            "3. STATUTORY ACCURACY:\n"
+            "   - Under the Legal Metrology (Packaged Commodities) Rules, 2011 (including G.S.R. 722(E) dated 6 Oct 2023):\n"
+            "     * 'Combination package' (Rule 2(ka)): Contains two or more individual pieces or packages of DISSIMILAR commodities (e.g., spoon, knife, fork, cup, napkins).\n"
+            "     * 'Group package' (Rule 2(kb)): Contains two or more individual pieces or packages of SIMILAR, but NOT identical commodities differing in size, quantity, appearance, or brand (e.g., sponges of different dimensions, assorted biscuits).\n"
+            "     * 'Multi-piece package' (Rule 2(kc)): Contains two or more individual packaged or labelled pieces of the SAME commodities of IDENTICAL quantity (e.g., 5 soap cakes of 20g each = 100g total). For food articles, FSSA 2006 provisions additionally apply.\n"
+            "     * Unit Sale Price exemption (Rule 6(11) proviso): Declaration of Unit Sale Price is NOT required for combination, group, or multi-piece packages.\n"
+            "   - Cite verified rule numbers and gazette citations in English.\n"
+            "4. COMPLETION: Ensure all explanations, table cells, and sentences are fully completed without truncating mid-sentence.\n"
+            "5. If active inspection data is provided above, refer directly to this specific product, its declarations, detected issues (e.g. flap pointers, missing details), and captured images."
         )
 
     def _synthesize_groq(self, query: str, context: str, scan_context: Optional[Dict[str, Any]] = None) -> Optional[str]:
@@ -231,8 +254,9 @@ class RAGAssistant:
                             "role": "system",
                             "content": (
                                 "You are an expert Legal Metrology Compliance Officer assistant for PRAMAN. "
-                                "Answer strictly from the supplied statutory context and active inspection data, cite Rule numbers and "
-                                "gazette notifications, and state limits when the context is insufficient."
+                                "Answer strictly from the supplied statutory context and active inspection data in fluent, professional English. "
+                                "Never output Hindi, Devanagari script, or Hindi gazette quotes. Structure your response neatly with clear headers, "
+                                "well-defined bulleted points, and accurate English statutory citations."
                             ),
                         },
                         {
@@ -241,7 +265,7 @@ class RAGAssistant:
                         },
                     ],
                     "temperature": 0.2,
-                    "max_tokens": 700,
+                    "max_tokens": 2048,
                 },
                 timeout=settings.LLM_TIMEOUT_SECONDS,
             )

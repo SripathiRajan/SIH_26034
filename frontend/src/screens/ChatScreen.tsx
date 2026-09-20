@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import DemoBanner from '../components/DemoBanner';
+import FormattedMessage from '../components/FormattedMessage';
 import { getChatScanContext } from '../services/chatContext';
 
 interface Message {
@@ -601,9 +602,7 @@ export default function ChatScreen({ navigation, route }: ChatScreenProps) {
                   </Text>
 
                   <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
-                    <Text style={[styles.msgText, isUser ? styles.msgTextUser : styles.msgTextAssistant]}>
-                      {msg.text}
-                    </Text>
+                    <FormattedMessage content={msg.text} isUser={isUser} />
 
                     {/* Statutory Citations */}
                     {!isUser && uniqueCitations.length > 0 && (

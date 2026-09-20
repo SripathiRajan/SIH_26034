@@ -52,6 +52,7 @@ export async function flushOfflineQueue(): Promise<{ syncedCount: number; result
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...api.getHeaders(),
       },
       body: JSON.stringify({
         deviceId,

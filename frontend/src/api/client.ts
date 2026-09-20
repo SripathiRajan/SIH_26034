@@ -163,7 +163,7 @@ class ApiClient {
     throw lastError || new Error('All backend fallback URLs unreachable');
   }
 
-  private getHeaders(): Record<string, string> {
+  public getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {};
     if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;

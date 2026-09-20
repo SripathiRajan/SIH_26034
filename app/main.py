@@ -4,6 +4,7 @@ Unified API combining Codebase 1 (Multi-Stage Cascaded OCR) & Codebase 2 (Statut
 """
 
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -17,35 +18,6 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.routers import auth, scans, product, sync, rules, chat, legacy, scan_session
-
-# Initialize FastAPI application
-app = FastAPI(
-    title="PRAMAN v4 — Legal Metrology Compliance & AI Enforcement Platform",
-    description="Unified API combining multi-stage cascaded OCR, statutory rule evaluation, RAG assistant, and offline sync.",
-    version="4.0.0",
-)
-
-# Rate limiting
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|.*\.azure\.com|.*\.azurewebsites\.net|.*\.azurestaticapps\.net|.*\.trycloudflare\.com)(:\d+)?$",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    allow_private_network=True,
-)
-
-# Ensure upload directory exists
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-if os.path.exists(UPLOAD_DIR):
-    app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
-
 
 def _verify_schema_version():
     """Refuse to boot against a DB whose alembic revision is not the current head."""
@@ -73,30 +45,75 @@ def _verify_schema_version():
         logger.warning(f"Schema version check skipped: {e}")
 
 
-@app.on_event("startup")
-def startup_event():
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
     import threading
     _verify_schema_version()
     create_tables()
     logger.info("✓ PRAMAN v4 database initialized")
 
-    def _warmup_models():
-        # Sequential preload of every OCR engine. Lazy first-use inside worker
-        # threads crashes natively on Windows (OpenMP/DLL init race), and
-        # preloading also removes the multi-second first-scan latency spike.
-        from core.models import registry
-        for name, getter in (
-            ("PaddleOCR (primary)", registry.get_paddle_ocr),
-            ("EasyOCR (tier 2)", registry.get_easyocr_reader),
-            ("SuryaOCR (tier 2)", registry.get_surya_detector),
-        ):
-            try:
-                getter()
-                logger.info(f"✓ {name} pre-warmed and ready in memory")
-            except Exception as e:
-                logger.warning(f"Background model pre-warm note ({name}): {e}")
+    if os.environ.get("PRAMAN_PRELOAD_MODELS", "1") != "0":
+        def _warmup_models():
+            # Sequential preload of every OCR engine. Lazy first-use inside worker
+            # threads crashes natively on Windows (OpenMP/DLL init race), and
+            # preloading also removes the multi-second first-scan latency spike.
+            # Set PRAMAN_PRELOAD_MODELS=0 to keep startup fast on constrained SKUs.
+            from core.models import registry
+            for name, getter in (
+                ("PaddleOCR (primary)", registry.get_paddle_ocr),
+                ("EasyOCR (tier 2)", registry.get_easyocr_reader),
+                ("SuryaOCR (tier 2)", registry.get_surya_detector),
+            ):
+                try:
+                    getter()
+                    logger.info(f"✓ {name} pre-warmed and ready in memory")
+                except Exception as e:
+                    logger.warning(f"Background model pre-warm note ({name}): {e}")
 
-    threading.Thread(target=_warmup_models, daemon=True).start()
+        threading.Thread(target=_warmup_models, daemon=True).start()
+    yield
+
+
+# Initialize FastAPI application
+app = FastAPI(
+    title="PRAMAN v4 — Legal Metrology Compliance & AI Enforcement Platform",
+    description="Unified API combining multi-stage cascaded OCR, statutory rule evaluation, RAG assistant, and offline sync.",
+    version="4.0.0",
+    lifespan=lifespan,
+)
+
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+# Configure CORS — explicit origins come from CORS_ORIGINS (env-configurable).
+# The dev regex only permits loopback/private ranges; production hosts must be
+# listed explicitly in CORS_ORIGINS rather than matched by wildcard.
+from core.config import ENVIRONMENT
+
+if ENVIRONMENT in ("development", "dev", "test", "local"):
+    _origin_regex = (
+        r"^https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+"
+        r"|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$"
+    )
+else:
+    _origin_regex = None  # explicit allowlist only
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_origin_regex=_origin_regex,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_private_network=ENVIRONMENT in ("development", "dev", "test", "local"),
+)
+
+# Ensure upload directory exists
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+if os.path.exists(UPLOAD_DIR):
+    app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 # Include all modular routers
@@ -112,4 +129,6 @@ app.include_router(scan_session.router)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    is_dev = ENVIRONMENT in ("development", "dev", "test", "local")
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=is_dev)

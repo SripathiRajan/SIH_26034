@@ -46,6 +46,16 @@ def resize_for_ocr(image_path: str, max_long_edge: int = MAX_IMAGE_LONG_EDGE) ->
     cv2.imwrite(optimized_path, resized)
     return optimized_path, True
 
+def apply_clahe_sharpen(img_bgr: np.ndarray) -> np.ndarray:
+    """Applies CLAHE contrast enhancement and unsharp masking to an image array."""
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    blurred = cv2.GaussianBlur(enhanced, (0, 0), 3)
+    sharpened = cv2.addWeighted(enhanced, 1.5, blurred, -0.5, 0)
+    return cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
+
+
 def enhance_image(image_path: str) -> str:
     """
     Applies CLAHE contrast enhancement and unsharp mask.
@@ -55,12 +65,7 @@ def enhance_image(image_path: str) -> str:
     if img is None:
         return image_path
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(gray)
-    blurred = cv2.GaussianBlur(enhanced, (0, 0), 3)
-    sharpened = cv2.addWeighted(enhanced, 1.5, blurred, -0.5, 0)
-    enhanced_bgr = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
+    enhanced_bgr = apply_clahe_sharpen(img)
 
     base, ext = os.path.splitext(image_path)
     tmp_path = f"{base}_enhanced{ext}"
@@ -113,12 +118,7 @@ def crop_region_around_keyword(
     crop = img[y1:y2, x1:x2]
 
     # Apply CLAHE + unsharp mask to the crop for better OCR on faint text
-    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(gray)
-    blurred = cv2.GaussianBlur(enhanced, (0, 0), 3)
-    sharpened = cv2.addWeighted(enhanced, 1.5, blurred, -0.5, 0)
-    crop_bgr = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
+    crop_bgr = apply_clahe_sharpen(crop)
 
     base, ext = os.path.splitext(image_path)
     crop_path = f"{base}_crop_{x1}_{y1}{ext}"

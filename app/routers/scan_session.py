@@ -171,27 +171,7 @@ session_store = SessionStore()
 
 
 def _lookup_gtin_data(db: Session, gtin: Optional[str]) -> Optional[Dict[str, Any]]:
-    if not gtin:
-        return None
-    pm = db.query(ProductMasterDB).filter(ProductMasterDB.gtin == gtin).first()
-    if pm:
-        return {
-            "found": True,
-            "gtin": gtin,
-            "brand": pm.brand,
-            "product_name": pm.product_name,
-            "net_weight": pm.standard_net_quantity or pm.net_quantity,
-            "mrp": pm.expected_mrp_max or pm.standard_mrp,
-            "expected_mrp_range": {
-                "min": pm.expected_mrp_min or 0.0,
-                "max": pm.expected_mrp_max or float("inf"),
-            } if (pm.expected_mrp_min or pm.expected_mrp_max) else None,
-            "declared_net_qty": pm.standard_net_quantity or pm.net_quantity,
-        }
-    data = gtin_lookup.lookup_gtin(gtin)
-    if data and "gtin" not in data:
-        data["gtin"] = gtin
-    return data
+    return gtin_lookup.resolve_gtin_metadata(db, gtin)
 
 
 # ── Endpoint 1: Upload View(s) / Create / Resume Session ──────────────────

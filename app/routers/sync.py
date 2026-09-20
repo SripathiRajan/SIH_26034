@@ -77,22 +77,7 @@ async def sync_offline_scans(
                 f.write(image_bytes)
 
             # 1. Product GTIN lookup
-            gtin_data = None
-            if item.gtin:
-                pm = db.query(ProductMasterDB).filter(ProductMasterDB.gtin == item.gtin).first()
-                if pm:
-                    gtin_data = {
-                        "found": True,
-                        "gtin": item.gtin,
-                        "brand": pm.brand,
-                        "product_name": pm.product_name,
-                        "net_weight": pm.standard_net_quantity or pm.net_quantity,
-                        "mrp": pm.expected_mrp_max or pm.standard_mrp,
-                    }
-                else:
-                    gtin_data = gtin_lookup.lookup_gtin(item.gtin)
-                    if gtin_data and "gtin" not in gtin_data:
-                        gtin_data["gtin"] = item.gtin
+            gtin_data = gtin_lookup.resolve_gtin_metadata(db, item.gtin)
 
             # 2. Run pipeline
             report = await loop.run_in_executor(
