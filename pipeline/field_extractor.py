@@ -267,16 +267,40 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                     is_field_found = True
             elif field_key == "fssai":
                 digits = re.sub(r"\D", "", captured_val)
-                if len(digits) == 14:
+                if len(digits) == 14 and digits[0] in ("1", "2"):
                     captured_val = digits
                     is_field_found = True
+                elif len(digits) in (13, 14, 15):
+                    near = re.search(r"[12]\d{13}", digits)
+                    if near:
+                        captured_val = near.group(0)
+                        is_field_found = True
+                    else:
+                        m14 = re.search(r"\b([12]\d{13}|\d{14})\b", matched_line)
+                        if m14:
+                            captured_val = m14.group(1)
+                            is_field_found = True
+                        else:
+                            raw_line_digits = re.sub(r"\D", "", matched_line)
+                            m_raw = re.search(r"[12]\d{13}", raw_line_digits)
+                            if m_raw:
+                                captured_val = m_raw.group(0)
+                                is_field_found = True
+                            else:
+                                is_field_found = False
                 else:
                     m14 = re.search(r"\b([12]\d{13}|\d{14})\b", matched_line)
                     if m14:
                         captured_val = m14.group(1)
                         is_field_found = True
                     else:
-                        is_field_found = False
+                        raw_line_digits = re.sub(r"\D", "", matched_line)
+                        m_raw = re.search(r"[12]\d{13}", raw_line_digits)
+                        if m_raw:
+                            captured_val = m_raw.group(0)
+                            is_field_found = True
+                        else:
+                            is_field_found = False
             elif field_key in {"manufacture_date", "use_by"} and captured_val:
                 captured_val = normalize_date_token(captured_val)
                 is_field_found = True

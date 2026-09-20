@@ -126,19 +126,28 @@ def ensemble_scan(
                         except Exception:
                             pass
 
-        # ── Stage 3: Tier 3 VLM (optional, critical fields only) ─────────
-        if enable_vlm_fallback:
-            fields_s3, _, flap_s3 = extract_fields(all_results)
-            critical_missing = [
-                k for k, v in fields_s3.items()
-                if not v["found"] and k in VLM_CRITICAL_FIELDS
-                and not (flap_s3.get("flap_detected") and k in {"mrp", "manufacture_date", "use_by"})
-            ]
-            if critical_missing:
-                logger.info(f"  Stage 3: VLM fallback for critical missing: {critical_missing}")
+        # ── Stage 3: Tier 3 VLM (auto-triggered if ANY field is missing) ─
+        fields_s3, _, flap_s3 = extract_fields(all_results)
+        any_missing = [
+            k for k, v in fields_s3.items()
+            if not v["found"]
+            and not (flap_s3.get("flap_detected") and k in {"mrp", "manufacture_date", "use_by", "net_quantity"})
+        ]
+        if any_missing and not session_mode:
+            logger.info(f"  Stage 3: VLM fallback auto-triggered — {len(any_missing)} field(s) still missing: {any_missing}")
+            try:
                 vlm_res = run_vlm_ocr(active_path)
-                logger.info(f"  ✓ Florence-2 VLM: {len(vlm_res)} regions")
+                logger.info(f"  ✓ Florence-2 VLM: {len(vlm_res)} regions added")
                 all_results.extend(vlm_res)
+            except Exception as e:
+                logger.warning(f"  Florence-2 VLM fallback skipped/failed: {e}")
+        elif any_missing and enable_vlm_fallback:
+            logger.info(f"  Stage 3 (session): VLM fallback for {any_missing}")
+            try:
+                vlm_res = run_vlm_ocr(active_path)
+                all_results.extend(vlm_res)
+            except Exception as e:
+                logger.warning(f"  Florence-2 VLM fallback skipped/failed: {e}")
 
         # ── Stage 4: Geometric IoU spatial merge + reading order sort ─────
         merged = merge_and_sort(all_results, IOU_MERGE_THRESHOLD)

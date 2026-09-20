@@ -37,6 +37,37 @@ class ApiClient {
     this.authToken = token;
   }
 
+  public getAlternatePortUrl(): string | null {
+    if (this.baseUrl.includes(':8000')) {
+      return this.baseUrl.replace(':8000', ':8001');
+    }
+    if (this.baseUrl.includes(':8001')) {
+      return this.baseUrl.replace(':8001', ':8000');
+    }
+    return null;
+  }
+
+  public async fetchWithFallback(urlPath: string, init?: RequestInit): Promise<Response> {
+    const primaryUrl = urlPath.startsWith('http') ? urlPath : `${this.baseUrl}${urlPath}`;
+    try {
+      return await fetch(primaryUrl, init);
+    } catch (err: any) {
+      const altBase = this.getAlternatePortUrl();
+      if (altBase && !urlPath.startsWith('http')) {
+        try {
+          const altUrl = `${altBase}${urlPath}`;
+          const altRes = await fetch(altUrl, init);
+          console.info(`[ApiClient] Auto-switched active backend port to: ${altBase}`);
+          this.baseUrl = altBase;
+          return altRes;
+        } catch {
+          // both failed
+        }
+      }
+      throw err;
+    }
+  }
+
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {};
     if (this.authToken) {
@@ -52,7 +83,7 @@ class ApiClient {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.HEALTH}`, {
+      const res = await this.fetchWithFallback(API_CONFIG.ENDPOINTS.HEALTH, {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -131,7 +162,7 @@ class ApiClient {
       if (onProgress) onProgress(1);
 
       const scanEndpoint = API_CONFIG.ENDPOINTS.SCAN || '/api/scan';
-      const response = await fetch(`${this.baseUrl}${scanEndpoint}`, {
+      const response = await this.fetchWithFallback(scanEndpoint, {
         method: 'POST',
         headers: this.getHeaders(),
         body: formData,
@@ -247,7 +278,7 @@ class ApiClient {
       }
 
       const endpoint = API_CONFIG.ENDPOINTS.SCAN_SESSION || '/api/scan/session';
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      const response = await this.fetchWithFallback(endpoint, {
         method: 'POST',
         headers: this.getHeaders(),
         body: formData,
@@ -293,7 +324,7 @@ class ApiClient {
         ? API_CONFIG.ENDPOINTS.FINALIZE_SESSION(sessionId)
         : `/api/scan/session/${sessionId}/finalize`;
 
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      const response = await this.fetchWithFallback(endpoint, {
         method: 'POST',
         headers: {
           ...this.getHeaders(),
@@ -335,7 +366,7 @@ class ApiClient {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
-      await fetch(`${this.baseUrl}/api/scan/session/${sessionId.trim()}`, {
+      await this.fetchWithFallback(`/api/scan/session/${sessionId.trim()}`, {
         method: 'DELETE',
         headers: this.getHeaders(),
         signal: controller.signal,
@@ -358,8 +389,8 @@ class ApiClient {
       if (params?.status && params.status !== 'all') queryParams.append('status', params.status);
       if (params?.page) queryParams.append('page', String(params.page));
 
-      const url = `${this.baseUrl}${API_CONFIG.ENDPOINTS.SCANS_LIST}?${queryParams.toString()}`;
-      const res = await fetch(url, {
+      const path = `${API_CONFIG.ENDPOINTS.SCANS_LIST}?${queryParams.toString()}`;
+      const res = await this.fetchWithFallback(path, {
         headers: this.getHeaders(),
         signal: controller.signal,
       });
@@ -403,7 +434,7 @@ class ApiClient {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.SCAN_DETAIL(id)}`, {
+      const res = await this.fetchWithFallback(API_CONFIG.ENDPOINTS.SCAN_DETAIL(id), {
         headers: this.getHeaders(),
         signal: controller.signal,
       });
@@ -432,7 +463,7 @@ class ApiClient {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch(`${this.baseUrl}/api/stats`, {
+      const res = await this.fetchWithFallback('/api/stats', {
         headers: this.getHeaders(),
         signal: controller.signal,
       });
@@ -462,7 +493,7 @@ class ApiClient {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
-      const res = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.CHAT}`, {
+      const res = await this.fetchWithFallback(API_CONFIG.ENDPOINTS.CHAT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -500,7 +531,7 @@ class ApiClient {
       if (category && category !== 'all') q.append('category', category);
       if (search) q.append('search', search);
 
-      const res = await fetch(`${this.baseUrl}/api/rules?${q.toString()}`, {
+      const res = await this.fetchWithFallback(`/api/rules?${q.toString()}`, {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -542,7 +573,7 @@ class ApiClient {
     fullName?: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/auth/register`, {
+      const res = await this.fetchWithFallback('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -570,7 +601,7 @@ class ApiClient {
    */
   public async login(identifier: string, password: string): Promise<{ success: boolean; token?: string; user?: OfficerUser; error?: string }> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/auth/login`, {
+      const res = await this.fetchWithFallback('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: identifier, password }),
@@ -624,7 +655,7 @@ class ApiClient {
    */
   public async patchNotes(scanId: string, notes: string): Promise<{ success: boolean; notes: string }> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/scans/${scanId}/notes`, {
+      const res = await this.fetchWithFallback(`/api/scans/${scanId}/notes`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

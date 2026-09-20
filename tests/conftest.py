@@ -34,7 +34,6 @@ def isolate_llm_keys():
     app_config.settings.GROQ_API_KEY = None
     app_config.settings.GEMINI_API_KEY = None
     os.environ.pop("GROQ_API_KEY", None)
-    os.environ.pop("GEMINI_API_KEY", None)
     yield
     app_config.settings.GROQ_API_KEY = saved_settings[0]
     app_config.settings.GEMINI_API_KEY = saved_settings[1]
@@ -42,3 +41,16 @@ def isolate_llm_keys():
         os.environ["GROQ_API_KEY"] = saved_env[0]
     if saved_env[1] is not None:
         os.environ["GEMINI_API_KEY"] = saved_env[1]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_vlm():
+    """
+    Mock Florence-2 VLM fallback during pytest suite to ensure tests remain
+    hermetic and do not attempt to download weights over network.
+    """
+    from unittest.mock import patch
+    with patch("pipeline.ensemble_pipeline.run_vlm_ocr", return_value=[]), \
+         patch("ocr.vlm_engine.run_vlm_ocr", return_value=[]):
+        yield
+

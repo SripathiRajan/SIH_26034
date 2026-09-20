@@ -50,3 +50,19 @@ def test_strict_fssai_validation():
     ]
     fields_inv, _, _ = extract_fields(invalid_results)
     assert fields_inv["fssai"]["found"] is False
+
+    # Spaced digits FSSAI
+    spaced_results = [
+        {"text": "FSSAI Lic. No. 100 120 11000 123", "confidence": 0.95, "box": [[0,0],[10,0],[10,10],[0,10]], "source": "paddle"}
+    ]
+    fields_sp, _, _ = extract_fields(spaced_results)
+    assert fields_sp["fssai"]["found"] is True
+    assert fields_sp["fssai"]["captured"] == "10012011000123"
+
+    # Near-miss with OCR bounding noise
+    near_results = [
+        {"text": "Lic No: 12421906000121", "confidence": 0.95, "box": [[0,0],[10,0],[10,10],[0,10]], "source": "paddle"}
+    ]
+    fields_nr, _, _ = extract_fields(near_results)
+    assert fields_nr["fssai"]["found"] is True
+    assert fields_nr["fssai"]["captured"] == "12421906000121"
