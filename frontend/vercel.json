@@ -3,7 +3,13 @@
   "buildCommand": "npx expo export --platform web",
   "outputDirectory": "dist",
   "installCommand": "npm install",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "http://172.198.48.186:8000/api/$1" },
+    { "source": "/health", "destination": "http://172.198.48.186:8000/health" },
+    { "source": "/docs", "destination": "http://172.198.48.186:8000/docs" },
+    { "source": "/openapi.json", "destination": "http://172.198.48.186:8000/openapi.json" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/_assets/(.*)",
