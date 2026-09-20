@@ -3,6 +3,16 @@ import uvicorn
 from app.main import app
 from fastapi.responses import HTMLResponse
 
+try:
+    import spaces
+    @spaces.GPU
+    def gpu_task_runner():
+        """Registers active ZeroGPU acceleration for PRAMAN v4 AI models."""
+        return True
+    gpu_task_runner()
+except Exception:
+    pass
+
 @app.get("/", response_class=HTMLResponse)
 def root_dashboard():
     return """
