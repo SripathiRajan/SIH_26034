@@ -4,10 +4,10 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "http://172.198.48.186:8000/api/$1" },
-    { "source": "/health", "destination": "http://172.198.48.186:8000/health" },
-    { "source": "/docs", "destination": "http://172.198.48.186:8000/docs" },
-    { "source": "/openapi.json", "destination": "http://172.198.48.186:8000/openapi.json" },
+    { "source": "/api/(.*)", "destination": "https://investors-dui-mario-precisely.trycloudflare.com/api/$1" },
+    { "source": "/health", "destination": "https://investors-dui-mario-precisely.trycloudflare.com/health" },
+    { "source": "/docs", "destination": "https://investors-dui-mario-precisely.trycloudflare.com/docs" },
+    { "source": "/openapi.json", "destination": "https://investors-dui-mario-precisely.trycloudflare.com/openapi.json" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

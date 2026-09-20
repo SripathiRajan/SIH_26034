@@ -40,3 +40,5 @@ node_modules/
 
 .admin_credentials.txt
 cloudflared.exe
+public_url.txt
+tunnel_url.txt
