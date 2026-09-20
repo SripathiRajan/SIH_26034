@@ -6,7 +6,7 @@ easyocr==1.7.2
 surya-ocr>=0.4.0
 transformers==5.17.0
 torch==2.13.0
-opencv-python>=4.10.0
+opencv-python<=4.6.0.66
 Pillow==10.4.0
 numpy==1.26.4
 requests==2.34.2
