@@ -83,10 +83,10 @@ if ENVIRONMENT == "production" and SECRET_KEY == "praman-dev-secret-CHANGE-IN-PR
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
-# CORS — Expo Metro, Expo Web, React Native dev, and web scanner
+# CORS — Expo Metro, Expo Web, React Native dev, Azure cloudapp, and web scanner
 _raw_origins = os.environ.get(
     "CORS_ORIGINS",
-    "http://localhost:8081,http://127.0.0.1:8081,http://localhost:19006,http://localhost:3000,http://127.0.0.1:8000,http://localhost:8000"
+    "http://localhost:8081,http://127.0.0.1:8081,http://localhost:19006,http://localhost:3000,http://127.0.0.1:8000,http://localhost:8000,http://praman-ai.indiasouthcentral.cloudapp.azure.com,https://praman-ai.indiasouthcentral.cloudapp.azure.com"
 )
 CORS_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 

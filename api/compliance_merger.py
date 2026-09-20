@@ -78,9 +78,15 @@ def merge_package_faces(
                     merged_fields[field_name]["confidence"] = new_conf
                     merged_fields[field_name]["found_on_face"] = label
                     merged_fields[field_name]["source"] = f_data.get("source")
-                    for extra_key in ("is_valid", "needs_review", "review_reason", "violation_reason", "captured", "location"):
+                    for extra_key in ("is_valid", "needs_review", "review_reason", "violation_reason", "captured", "location", "failure_class"):
                         if extra_key in f_data:
                             merged_fields[field_name][extra_key] = f_data[extra_key]
+            else:
+                if not merged_fields[field_name]["found"]:
+                    for extra_key in ("is_valid", "needs_review", "review_reason", "violation_reason", "captured", "location", "failure_class"):
+                        if extra_key in f_data and f_data[extra_key] is not None:
+                            merged_fields[field_name][extra_key] = f_data[extra_key]
+
 
     total_fields = len(merged_fields)
     found_count = sum(1 for v in merged_fields.values() if v.get("found", False))

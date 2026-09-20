@@ -1,5 +1,5 @@
 import re
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional, Callable
 from pipeline.field_rules import MANDATORY_FIELDS, FLAP_POINTER_PATTERN
 from app.ocr.engine_base import TextPolygon
 from app.extraction.reading_order import ReadingOrderResolver
@@ -7,6 +7,222 @@ from app.extraction.declaration_parser import DeclarationExtractor
 
 _resolver = ReadingOrderResolver()
 _declaration_extractor = DeclarationExtractor()
+
+# ---------------------------------------------------------------------------
+# FAILURE CLASSES
+# F1 – Glyph corruption (dot-matrix pixel fusing/dropping)
+# F2 – Token fusion (two adjacent print zones merged by OCR)
+# F3 – Digit dropout (ink break causes a digit to disappear)
+# F4 – Wrong reading order (linear full_text loses 2-D layout context)
+# F5 – Regex brittleness (greedy early exit, first match wins even if wrong)
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# GLYPH REPAIR TABLE (Layer 1 / F1)
+# Per-context confusable character maps.
+# ---------------------------------------------------------------------------
+_NUMERIC_GLYPH_MAP = {
+    'O': '0', 'o': '0', 'I': '1', 'l': '1', '|': '1',
+    'S': '5', 'B': '8', 'Z': '2', 'G': '6', 'q': '9',
+}
+_ALPHA_GLYPH_MAP = {
+    '0': 'O', '1': 'I', '5': 'S', '8': 'B',
+}
+_CURRENCY_GLYPH_MAP = {'?': '₹', 'R': '₹'}
+
+
+def normalize_ocr_token(token: str, field_type: str = "generic") -> List[str]:
+    """
+    Universal pre-processor for raw OCR tokens.  Returns a **list** of
+    candidate normalised strings (best-first).
+
+    For most tokens this is a singleton list.
+    For fused tokens (F2) it may be a list of sub-tokens.
+    For numeric fields with digit-dropout (F3) a dropped-digit recovery
+    variant is appended as the second candidate.
+
+    field_type hints:
+      'date'      – apply date-specific normalisation on top
+      'mrp'       – apply currency symbol repair
+      'fssai'     – numeric context, digit-drop recovery enabled
+      'numeric'   – generic numeric context
+      'generic'   – no extra transformation
+    """
+    if not token:
+        return [token]
+    t = token.strip()
+
+    # ── F2: Fusion splitter ──────────────────────────────────────────────
+    # Detect tokens that look like two month/year patterns concatenated,
+    # e.g. 'N2026OCT2026', 'JUN2026OCT2026', 'JUN/2026OCT/2026'
+    MONTH_ABBR = r'(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|'\
+                 r'0CT|1UN|IUN|UN|0EC|N0V|AU6|F3B|S3P|M4R|M4Y|1UL|IUL|1AN|IAN)'
+    fusion_pat = re.compile(
+        rf'({MONTH_ABBR}[\/\-]?(?:20\d{{2}}|\d{{2}}))'
+        rf'({MONTH_ABBR}[\/\-]?(?:20\d{{2}}|\d{{2}}))',
+        re.I
+    )
+    fm = fusion_pat.match(t)
+    if fm:
+        return [fm.group(1), fm.group(2)]  # Return as two candidates
+
+    # ── F1: Glyph repair (context-aware) ────────────────────────────────
+    if field_type in ('fssai', 'numeric'):
+        # Purely numeric context: fix letter-for-digit confusables
+        repaired = ''.join(_NUMERIC_GLYPH_MAP.get(c, c) for c in t)
+    elif field_type == 'mrp':
+        # Currency context
+        repaired = ''.join(_CURRENCY_GLYPH_MAP.get(c, c) for c in t)
+    else:
+        repaired = t  # Leave untouched for generic / date / alpha fields
+
+    # ── F3: Digit-drop recovery for numeric IDs (FSSAI) ─────────────────
+    candidates = [repaired]
+    if field_type == 'fssai':
+        digits = re.sub(r'\D', '', repaired)
+        if 10 <= len(digits) <= 13 and digits and digits[0] in ('1', '2'):
+            # Try inserting a '0' at the most likely gap positions (positions 7, 8, 9)
+            for pos in (7, 8, 9):
+                if pos <= len(digits):
+                    recovered = digits[:pos] + '0' + digits[pos:]
+                    if len(recovered) == 14 and recovered[0] in ('1', '2'):
+                        candidates.append(recovered)
+
+    return candidates
+
+
+def _audit_field(
+    found: bool,
+    value,
+    captured,
+    confidence: float,
+    source: str,
+    rule: str,
+    label: str,
+    location: str,
+    *,
+    raw_token: str = "",
+    normalized_token: str = "",
+    match_pattern: str = "",
+    failure_class: Optional[str] = None,
+    retry_count: int = 0,
+    source_engine: str = "",
+    **extra,
+) -> Dict[str, Any]:
+    """
+    Layer 5 – Structured Audit Trail.
+    Constructs a complete field dict that always includes diagnostic metadata
+    so that every false-negative is self-reporting.
+    """
+    d: Dict[str, Any] = {
+        "found": found,
+        "value": value,
+        "captured": captured,
+        "confidence": confidence,
+        "source": source,
+        "rule": rule,
+        "label": label,
+        "location": location,
+        # ── Audit trail (Layer 5) ──────────────────────────────────────────
+        "raw_token": raw_token or (str(captured) if captured else ""),
+        "normalized_token": normalized_token or (str(captured) if captured else ""),
+        "match_pattern": match_pattern,
+        "failure_class": failure_class,   # None = clean, else 'F1'–'F5'
+        "retry_count": retry_count,
+        "source_engine": source_engine or source or "",
+    }
+    d.update(extra)
+    return d
+
+
+def extract_best_candidate(
+    texts: List[str],
+    patterns: List[re.Pattern],
+    validator: Callable[[str], bool],
+    normaliser: Callable[[str], List[str]],
+    all_results: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[Optional[str], float, str, str]:
+    """
+    Layer 2 – Candidate-Pool Extraction.
+    Iterates ALL (pattern × text × normalised form) combinations and returns
+    the best (value, confidence, matched_pattern_repr, source_engine).
+
+    This eliminates F5 (greedy early exit) and F4 (reading order lock-in) by
+    scanning every candidate before committing to a result.
+    """
+    best_val: Optional[str] = None
+    best_conf: float = 0.0
+    best_pattern: str = ""
+    best_engine: str = ""
+
+    all_results = all_results or []
+
+    for text in texts:
+        for pat in patterns:
+            for m in pat.finditer(text):
+                raw = m.group(0).strip()
+                # Try every normalised candidate
+                for norm_candidate in normaliser(raw):
+                    if validator(norm_candidate):
+                        # Look up confidence from the originating OCR region
+                        conf = 0.85
+                        engine = "ensemble"
+                        for r in all_results:
+                            if raw in r.get("text", "") or norm_candidate in r.get("text", ""):
+                                conf = float(r.get("confidence", 0.85))
+                                engine = r.get("source", "ensemble")
+                                break
+                        if conf > best_conf or best_val is None:
+                            best_val = norm_candidate
+                            best_conf = conf
+                            best_pattern = pat.pattern[:80]
+                            best_engine = engine
+
+    return best_val, best_conf, best_pattern, best_engine
+
+
+def get_neighbours(
+    seed_text: str,
+    all_results: List[Dict[str, Any]],
+    radius_px: float = 150.0,
+) -> List[Dict[str, Any]]:
+    """
+    Layer 3 – Spatial-Context Cross-Check.
+    Finds OCR regions whose bounding boxes are within `radius_px` of any
+    region whose text matches `seed_text`.  Used to search for field values
+    near their label keyword when the linear full_text pass fails (F4).
+    """
+    import numpy as np
+
+    def _centroid(box) -> Tuple[float, float]:
+        pts = np.array(box, dtype=np.float32)
+        return float(pts[:, 0].mean()), float(pts[:, 1].mean())
+
+    # Locate seed regions
+    seed_pattern = re.compile(re.escape(seed_text), re.I)
+    seed_centroids: List[Tuple[float, float]] = []
+    for r in all_results:
+        if seed_pattern.search(r.get("text", "")):
+            box = r.get("box") or []
+            if box:
+                seed_centroids.append(_centroid(box))
+
+    if not seed_centroids:
+        return []
+
+    neighbours: List[Dict[str, Any]] = []
+    for r in all_results:
+        box = r.get("box") or []
+        if not box:
+            continue
+        cx, cy = _centroid(box)
+        for sx, sy in seed_centroids:
+            dist = ((cx - sx) ** 2 + (cy - sy) ** 2) ** 0.5
+            if dist <= radius_px:
+                neighbours.append(r)
+                break
+
+    return neighbours
 
 FIELD_MAP_CB2_TO_CB1 = {
     "mrp": "mrp",
@@ -26,6 +242,7 @@ def normalize_date_token(token: str) -> str:
     Normalizes OCR errors in dot-matrix and stamped dates:
     - Preserves relative duration statements (e.g. 'BEST BEFORE NINE MONTHS FROM PACKAGING')
     - Dot matrix month corrections (1UN/IUN/!UN/N2026 -> JUN, 0CT -> OCT, 0EC/OEC -> DEC, etc.)
+    - Fused month+year (N2026 -> JUN/2026, UN2026 -> JUN/2026, 0CT2026 -> OCT/2026)
     - Disambiguates MM/YY -> MM/20YY (if 2-digit year)
     - Disambiguates DD/MM/YY -> DD/MM/20YY
     """
@@ -35,24 +252,42 @@ def normalize_date_token(token: str) -> str:
     if re.search(r"(?:month|day|week|year|pkg|packing|packaging|packging|mfg|manufacture)", t, re.I):
         return re.sub(r"\s+", " ", t)
 
-    t = re.sub(r"[\._\-\s]+", "/", t)
-
+    # 1. Handle fused dot matrix month+year tokens (with or without slashes):
+    # e.g. N2026 -> JUN/2026, 1UN2026 -> JUN/2026, 0CT2026 -> OCT/2026, 0CT/2026 -> OCT/2026
     dot_matrix_map = [
+        (r"\b(?:1UN|IUN|!UN|UN|N)[\/\-]?(20\d{2}|\d{2})\b", r"JUN/\1"),
+        (r"\b(?:0CT|O\s*CT)[\/\-]?(20\d{2}|\d{2})\b", r"OCT/\1"),
+        (r"\b(?:0EC|O\s*EC)[\/\-]?(20\d{2}|\d{2})\b", r"DEC/\1"),
+        (r"\b(?:F3B|FE\s*8)[\/\-]?(20\d{2}|\d{2})\b", r"FEB/\1"),
+        (r"\b(?:S3P|SE\s*P)[\/\-]?(20\d{2}|\d{2})\b", r"SEP/\1"),
+        (r"\b(?:M4R|MA\s*R)[\/\-]?(20\d{2}|\d{2})\b", r"MAR/\1"),
+        (r"\b(?:A0R|A\s*PR)[\/\-]?(20\d{2}|\d{2})\b", r"APR/\1"),
+        (r"\b(?:M4Y|MA\s*Y)[\/\-]?(20\d{2}|\d{2})\b", r"MAY/\1"),
+        (r"\b(?:1UL|IUL|!UL)[\/\-]?(20\d{2}|\d{2})\b", r"JUL/\1"),
+        (r"\b(?:AU6|AU\s*G)[\/\-]?(20\d{2}|\d{2})\b", r"AUG/\1"),
+        (r"\b(?:N0V|NO\s*V)[\/\-]?(20\d{2}|\d{2})\b", r"NOV/\1"),
+        (r"\b(?:1AN|IAN)[\/\-]?(20\d{2}|\d{2})\b", r"JAN/\1"),
+        # Standalone prefix replacements
         (r"\b(1UN|IUN|!UN|UN)([\/\-]?)", r"JUN\2"),
-        (r"\b(0CT|O CT)([\/\-]?)", r"OCT\2"),
-        (r"\b(0EC|OEC)([\/\-]?)", r"DEC\2"),
+        (r"\b(0CT|O\s*CT)([\/\-]?)", r"OCT\2"),
+        (r"\b(0EC|O\s*EC)([\/\-]?)", r"DEC\2"),
         (r"\b(F3B|FE8)([\/\-]?)", r"FEB\2"),
-        (r"\b(S3P|SE P)([\/\-]?)", r"SEP\2"),
-        (r"\b(M4R|MA R)([\/\-]?)", r"MAR\2"),
-        (r"\b(A0R|APRIL|A PR)([\/\-]?)", r"APR\2"),
-        (r"\b(M4Y|MA Y)([\/\-]?)", r"MAY\2"),
+        (r"\b(S3P|SE\s*P)([\/\-]?)", r"SEP\2"),
+        (r"\b(M4R|MA\s*R)([\/\-]?)", r"MAR\2"),
+        (r"\b(A0R|APRIL|A\s*PR)([\/\-]?)", r"APR\2"),
+        (r"\b(M4Y|MA\s*Y)([\/\-]?)", r"MAY\2"),
         (r"\b(1UL|IUL|!UL)([\/\-]?)", r"JUL\2"),
-        (r"\b(AU6|AU G)([\/\-]?)", r"AUG\2"),
-        (r"\b(N0V|NO V)([\/\-]?)", r"NOV\2"),
+        (r"\b(AU6|AU\s*G)([\/\-]?)", r"AUG\2"),
+        (r"\b(N0V|NO\s*V)([\/\-]?)", r"NOV\2"),
         (r"\b(1AN|IAN)([\/\-]?)", r"JAN\2"),
     ]
     for pattern, repl in dot_matrix_map:
         t = re.sub(pattern, repl, t, flags=re.I)
+
+    # General month name without slash followed directly by 4-digit or 2-digit year
+    t = re.sub(r"\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(20\d{2}|\d{2})\b", r"\1/\2", t, flags=re.I)
+
+    t = re.sub(r"[\._\-\s]+", "/", t)
 
     # Disambiguate MM/YY to MM/20YY
     m_my = re.match(r"^([A-Za-z]{3}|\d{1,2})[\/\-](\d{2})$", t)
@@ -134,12 +369,11 @@ def _extract_table_dates(
     has_exp_header = bool(re.search(r"(?:use\s*by|best\s*before|expiry|exp)", full_text, re.I))
 
     # 1. Search for fused dual dates like 'N20260CT/2026', 'JUN/2026OCT/2026'
-    fused_match = re.search(
+    for fused_match in re.finditer(
         r"([A-Za-z0-9]{1,4}[\/\-]?(?:20\d{2}|\d{2}))\s*([0-9A-Za-z]{3,4}[\/\-]?(?:20\d{2}|\d{2}))",
         full_text,
         re.I
-    )
-    if fused_match:
+    ):
         d1, d2 = normalize_date_token(fused_match.group(1)), normalize_date_token(fused_match.group(2))
         if is_valid_date(d1) and is_valid_date(d2):
             return d1, d2
@@ -248,7 +482,18 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
         matched_line = None
 
         if match:
-            if match.groups():
+            if field_key == "net_quantity":
+                g = match.groups()
+                if len(g) >= 2 and g[0] and g[1]:
+                    captured_val = f"{g[0].strip()} {g[1].strip()}"
+                elif len(g) >= 5 and g[3] and g[4]:
+                    captured_val = f"{g[3].strip()} {g[4].strip()}"
+                elif match.groups():
+                    non_empty = [x.strip() for x in match.groups() if x and x.strip()]
+                    captured_val = " ".join(non_empty)
+                else:
+                    captured_val = match.group(0).strip()
+            elif match.groups():
                 for g in match.groups():
                     if g and g.strip():
                         captured_val = g.strip()
@@ -265,8 +510,14 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                 if clean_mrp:
                     captured_val = clean_mrp
                     is_field_found = True
+            elif field_key == "net_quantity" and captured_val:
+                m_qty = re.search(r"(\d+[.,\d]*)\s*([a-zA-Z]+|\b[nu]\b)", matched_line or captured_val)
+                if m_qty:
+                    captured_val = f"{m_qty.group(1)} {m_qty.group(2)}"
+                is_field_found = True
+
             elif field_key == "fssai":
-                digits = re.sub(r"\D", "", captured_val)
+                digits = re.sub(r"\D", "", captured_val or "")
                 if len(digits) == 14 and digits[0] in ("1", "2"):
                     captured_val = digits
                     is_field_found = True
@@ -286,8 +537,14 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                             if m_raw:
                                 captured_val = m_raw.group(0)
                                 is_field_found = True
+                            elif 10 <= len(digits) <= 13 and digits[0] in ("1", "2"):
+                                captured_val = digits
+                                is_field_found = True
                             else:
                                 is_field_found = False
+                elif 10 <= len(digits) <= 13 and digits[0] in ("1", "2"):
+                    captured_val = digits
+                    is_field_found = True
                 else:
                     m14 = re.search(r"\b([12]\d{13}|\d{14})\b", matched_line)
                     if m14:
@@ -298,6 +555,9 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                         m_raw = re.search(r"[12]\d{13}", raw_line_digits)
                         if m_raw:
                             captured_val = m_raw.group(0)
+                            is_field_found = True
+                        elif 10 <= len(raw_line_digits) <= 13 and raw_line_digits[0] in ("1", "2"):
+                            captured_val = raw_line_digits
                             is_field_found = True
                         else:
                             is_field_found = False
@@ -316,35 +576,47 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                     conf = r.get("confidence", 0.90)
                     break
 
-            extracted[field_key] = {
-                "found": True,
-                "value": matched_line or captured_val,
-                "captured": captured_val,
-                "confidence": conf,
-                "source": source,
-                "rule": field_info["rule"],
-                "label": field_info["label"],
-                "location": "ON_PANEL"
-            }
+            # Determine failure class (F1 if normalisation changed the raw value)
+            raw_tok = matched_line or captured_val
+            norm_tok = captured_val
+            fc = None
+            if raw_tok and norm_tok and raw_tok != norm_tok:
+                fc = "F1"  # glyph correction was needed
+
+            extracted[field_key] = _audit_field(
+                found=True,
+                value=matched_line or captured_val,
+                captured=captured_val,
+                confidence=conf,
+                source=source,
+                rule=field_info["rule"],
+                label=field_info["label"],
+                location="ON_PANEL",
+                raw_token=raw_tok,
+                normalized_token=norm_tok,
+                match_pattern=field_info["pattern"].pattern[:80],
+                failure_class=fc,
+                retry_count=0,
+                source_engine=source,
+            )
         else:
             # If flap pointer was detected and instructed user to flip, do NOT hallucinate from fallback
             if is_flap_pointed:
-                extracted[field_key] = {
-                    "found": False,
-                    "value": None,
-                    "captured": None,
-                    "confidence": 0.0,
-                    "source": None,
-                    "rule": field_info["rule"],
-                    "label": field_info["label"],
-                    "location": "SEE_FLAP"
-                }
+                extracted[field_key] = _audit_field(
+                    found=False, value=None, captured=None,
+                    confidence=0.0, source=None,
+                    rule=field_info["rule"], label=field_info["label"],
+                    location="SEE_FLAP",
+                    failure_class="F4",  # Reading order / flap context
+                    retry_count=0,
+                )
                 continue
 
             # Check if CB2 declaration extractor found this field
             cb2_key = next((k for k, v in FIELD_MAP_CB2_TO_CB1.items() if v == field_key), None)
             cb2_data = cb2_decls.get(cb2_key) if cb2_key else None
 
+            raw_val = None
             if cb2_data and cb2_data.get("found"):
                 raw_val = cb2_data.get("rawValue") or str(cb2_data.get("parsedValue") or "")
                 if field_key == "fssai":
@@ -355,29 +627,29 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                     raw_val = normalize_date_token(raw_val)
 
             if cb2_data and cb2_data.get("found") and raw_val:
-                extracted[field_key] = {
-                    "found": True,
-                    "value": raw_val,
-                    "captured": raw_val,
-                    "confidence": float(cb2_data.get("confidence", 0.85)),
-                    "source": "declaration_extractor",
-                    "rule": field_info["rule"],
-                    "label": field_info["label"],
-                    "location": "ON_PANEL",
-                    "parsedValue": cb2_data.get("parsedValue")
-                }
+                extracted[field_key] = _audit_field(
+                    found=True,
+                    value=raw_val,
+                    captured=raw_val,
+                    confidence=float(cb2_data.get("confidence", 0.85)),
+                    source="declaration_extractor",
+                    rule=field_info["rule"],
+                    label=field_info["label"],
+                    location="ON_PANEL",
+                    retry_count=1,
+                    failure_class="F5",  # Needed CB2 fallback = regex missed it
+                    parsedValue=cb2_data.get("parsedValue"),
+                )
             else:
                 location = "SEE_FLAP" if is_flap_pointed else "MISSING"
-                extracted[field_key] = {
-                    "found": False,
-                    "value": None,
-                    "captured": None,
-                    "confidence": 0.0,
-                    "source": None,
-                    "rule": field_info["rule"],
-                    "label": field_info["label"],
-                    "location": location
-                }
+                extracted[field_key] = _audit_field(
+                    found=False, value=None, captured=None,
+                    confidence=0.0, source=None,
+                    rule=field_info["rule"], label=field_info["label"],
+                    location=location,
+                    failure_class="F5",  # All patterns exhausted
+                    retry_count=0,
+                )
 
     # 4. Table / column dual-date resolution fallback for manufacture_date & use_by (only if not on flap)
     if not flap_detected and (not extracted["manufacture_date"]["found"] or not extracted["use_by"]["found"]):
@@ -388,27 +660,33 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
             mfg_already_found=extracted["manufacture_date"]["found"],
         )
         if mfg_date and not extracted["manufacture_date"]["found"]:
-            extracted["manufacture_date"] = {
-                "found": True,
-                "value": f"DATE OF PACKAGING: {mfg_date}",
-                "captured": mfg_date,
-                "confidence": 0.88,
-                "source": "table_extractor",
-                "rule": MANDATORY_FIELDS["manufacture_date"]["rule"],
-                "label": MANDATORY_FIELDS["manufacture_date"]["label"],
-                "location": "ON_PANEL"
-            }
+            extracted["manufacture_date"] = _audit_field(
+                found=True,
+                value=f"DATE OF PACKAGING: {mfg_date}",
+                captured=mfg_date,
+                confidence=0.88,
+                source="table_extractor",
+                rule=MANDATORY_FIELDS["manufacture_date"]["rule"],
+                label=MANDATORY_FIELDS["manufacture_date"]["label"],
+                location="ON_PANEL",
+                normalized_token=mfg_date,
+                failure_class="F2",  # Was found via table/fusion recovery
+                retry_count=1,
+            )
         if exp_date and not extracted["use_by"]["found"]:
-            extracted["use_by"] = {
-                "found": True,
-                "value": f"USE BY: {exp_date}",
-                "captured": exp_date,
-                "confidence": 0.88,
-                "source": "table_extractor",
-                "rule": MANDATORY_FIELDS["use_by"]["rule"],
-                "label": MANDATORY_FIELDS["use_by"]["label"],
-                "location": "ON_PANEL"
-            }
+            extracted["use_by"] = _audit_field(
+                found=True,
+                value=f"USE BY: {exp_date}",
+                captured=exp_date,
+                confidence=0.88,
+                source="table_extractor",
+                rule=MANDATORY_FIELDS["use_by"]["rule"],
+                label=MANDATORY_FIELDS["use_by"]["label"],
+                location="ON_PANEL",
+                normalized_token=exp_date,
+                failure_class="F2",
+                retry_count=1,
+            )
 
     # 5. Fallback for FSSAI if not detected in full_text
     if not extracted["fssai"]["found"]:
@@ -420,24 +698,37 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                 for g in f_match.groups():
                     if g and g.strip():
                         digits = re.sub(r"\D", "", g.strip())
-                        if len(digits) == 14:
+                        if len(digits) == 14 and digits[0] in ("1", "2"):
+                            cap = digits
+                            break
+                        elif 10 <= len(digits) <= 14 and digits[0] in ("1", "2"):
                             cap = digits
                             break
                 if not cap:
                     all_digits = re.findall(r"\b([12]\d{13}|\d{14})\b", t)
                     if all_digits:
                         cap = all_digits[0]
-                if cap and len(cap) == 14:
-                    extracted["fssai"] = {
-                        "found": True,
-                        "value": t.strip(),
-                        "captured": cap,
-                        "confidence": float(r.get("confidence", 0.88)),
-                        "source": r.get("source", "ensemble"),
-                        "rule": MANDATORY_FIELDS["fssai"]["rule"],
-                        "label": MANDATORY_FIELDS["fssai"]["label"],
-                        "location": "ON_PANEL"
-                    }
+                    else:
+                        raw_d = re.sub(r"\D", "", t)
+                        if 10 <= len(raw_d) <= 14 and raw_d[0] in ("1", "2"):
+                            cap = raw_d
+                if cap:
+                    fc = None if len(cap) == 14 else "F3"  # F3 = digit drop
+                    extracted["fssai"] = _audit_field(
+                        found=True,
+                        value=t.strip(),
+                        captured=cap,
+                        confidence=float(r.get("confidence", 0.88)),
+                        source=r.get("source", "ensemble"),
+                        rule=MANDATORY_FIELDS["fssai"]["rule"],
+                        label=MANDATORY_FIELDS["fssai"]["label"],
+                        location="ON_PANEL",
+                        raw_token=t.strip(),
+                        normalized_token=cap,
+                        failure_class=fc,
+                        retry_count=1,
+                        source_engine=r.get("source", "ensemble"),
+                    )
                     break
 
     # 5.5 Fallback for MRP: standalone price next to / near MRP table header
@@ -449,16 +740,21 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                 if m_price:
                     val = float(m_price.group(1))
                     if 1.0 <= val <= 100000.0:
-                        extracted["mrp"] = {
-                            "found": True,
-                            "value": f"M.R.P. RS {m_price.group(1)}",
-                            "captured": m_price.group(1),
-                            "confidence": float(r.get("confidence", 0.88)),
-                            "source": "table_mrp_resolver",
-                            "rule": MANDATORY_FIELDS["mrp"]["rule"],
-                            "label": MANDATORY_FIELDS["mrp"]["label"],
-                            "location": "ON_PANEL"
-                        }
+                        extracted["mrp"] = _audit_field(
+                            found=True,
+                            value=f"M.R.P. RS {m_price.group(1)}",
+                            captured=m_price.group(1),
+                            confidence=float(r.get("confidence", 0.88)),
+                            source="table_mrp_resolver",
+                            rule=MANDATORY_FIELDS["mrp"]["rule"],
+                            label=MANDATORY_FIELDS["mrp"]["label"],
+                            location="ON_PANEL",
+                            raw_token=t,
+                            normalized_token=m_price.group(1),
+                            failure_class="F5",  # Needed table fallback
+                            retry_count=1,
+                            source_engine=r.get("source", "ensemble"),
+                        )
                         break
 
     # 6. Fallback for Net Quantity: standalone metric declarations outside nutrition tables
@@ -491,16 +787,19 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                 break
 
         if best_cand:
-            extracted["net_quantity"] = {
-                "found": True,
-                "value": f"NET WEIGHT: {best_cand}",
-                "captured": best_cand,
-                "confidence": best_conf,
-                "source": "metric_quantity_resolver",
-                "rule": MANDATORY_FIELDS["net_quantity"]["rule"],
-                "label": MANDATORY_FIELDS["net_quantity"]["label"],
-                "location": "ON_PANEL"
-            }
+            extracted["net_quantity"] = _audit_field(
+                found=True,
+                value=f"NET WEIGHT: {best_cand}",
+                captured=best_cand,
+                confidence=best_conf,
+                source="metric_quantity_resolver",
+                rule=MANDATORY_FIELDS["net_quantity"]["rule"],
+                label=MANDATORY_FIELDS["net_quantity"]["label"],
+                location="ON_PANEL",
+                normalized_token=best_cand,
+                failure_class="F5",  # Needed metric fallback resolver
+                retry_count=1,
+            )
 
     # 7. Fallback for Country of Origin: domestic manufacturer address / postal PIN code
     if not extracted["country_of_origin"]["found"]:
@@ -524,16 +823,19 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
         )
         if pin_match or (indian_geo_match and fssai_match):
             loc_detail = pin_match or (indian_geo_match.group(1).title() if indian_geo_match else "Domestic")
-            extracted["country_of_origin"] = {
-                "found": True,
-                "value": f"India (Domestic Product — {loc_detail})",
-                "captured": "India",
-                "confidence": 0.92,
-                "source": "domestic_address_resolver",
-                "rule": MANDATORY_FIELDS["country_of_origin"]["rule"],
-                "label": MANDATORY_FIELDS["country_of_origin"]["label"],
-                "location": "ON_PANEL"
-            }
+            extracted["country_of_origin"] = _audit_field(
+                found=True,
+                value=f"India (Domestic Product — {loc_detail})",
+                captured="India",
+                confidence=0.92,
+                source="domestic_address_resolver",
+                rule=MANDATORY_FIELDS["country_of_origin"]["rule"],
+                label=MANDATORY_FIELDS["country_of_origin"]["label"],
+                location="ON_PANEL",
+                normalized_token="India",
+                failure_class="F4",  # Resolved via spatial/geo context
+                retry_count=1,
+            )
 
     # 8. Refinement for Manufacturer: clean up if corrupted by price/mrp
     if extracted["manufacturer"]["found"]:

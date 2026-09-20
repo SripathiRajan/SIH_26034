@@ -3,8 +3,24 @@ import re
 import time
 import os
 
+import socket
+
+def get_active_port():
+    for port in (8001, 8000):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)
+                if s.connect_ex(('127.0.0.1', port)) == 0:
+                    return port
+        except Exception:
+            pass
+    return 8000
+
+active_port = get_active_port()
+print(f"[open_tunnel] Tunneling backend on port {active_port}...")
+
 proc = subprocess.Popen(
-    ["cloudflared.exe", "tunnel", "--url", "http://localhost:8000"],
+    ["cloudflared.exe", "tunnel", "--url", f"http://localhost:{active_port}"],
     stdout=subprocess.PIPE,
     stderr=subprocess.STDOUT,
     text=True,

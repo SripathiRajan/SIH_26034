@@ -328,7 +328,20 @@ async def process_session_views(
         )
         session.views.append(scan_view)
 
-    # 4. Merge all views accumulated in the session
+    # 4. Merge all views accumulated in the session (auto-detect GTIN if absent)
+    if not session.gtin:
+        all_tokens = []
+        for v in session.views:
+            tokens = v.pipeline_report.get("raw_ocr_tokens") or []
+            all_tokens.extend(tokens)
+            ft = v.pipeline_report.get("full_text") or ""
+            if ft:
+                all_tokens.extend(ft.split("\n"))
+        detected_gtin = gtin_lookup.find_gtin_in_tokens(all_tokens)
+        if detected_gtin:
+            session.gtin = detected_gtin
+            logger.info(f"[SessionStore] Auto-detected GTIN {detected_gtin} from view OCR")
+
     gtin_data = _lookup_gtin_data(db, session.gtin)
 
     face_results = [
@@ -417,7 +430,20 @@ async def finalize_scan_session(
             detail="Cannot finalize session with 0 captured views."
         )
 
-    # 1. Lookup GTIN data if present
+    # 1. Lookup GTIN data if present, or auto-detect from views
+    if not session.gtin:
+        all_tokens = []
+        for v in session.views:
+            tokens = v.pipeline_report.get("raw_ocr_tokens") or []
+            all_tokens.extend(tokens)
+            ft = v.pipeline_report.get("full_text") or ""
+            if ft:
+                all_tokens.extend(ft.split("\n"))
+        detected_gtin = gtin_lookup.find_gtin_in_tokens(all_tokens)
+        if detected_gtin:
+            session.gtin = detected_gtin
+            logger.info(f"[SessionStore Finalize] Auto-detected GTIN {detected_gtin} from view OCR")
+
     gtin_data = _lookup_gtin_data(db, session.gtin)
 
     # 2. Merge all views

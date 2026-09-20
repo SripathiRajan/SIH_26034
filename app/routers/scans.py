@@ -153,13 +153,38 @@ async def analyze_package_image(
             lambda: ensemble_scan(file_path, use_ensemble=bool(use_ensemble)),
         )
 
-        # 3. Check for annotated image
+        # 3. Auto-detect GTIN from OCR tokens if not explicitly provided
+        if not gtin and not gtin_data:
+            tokens = report.get("raw_ocr_tokens") or []
+            ft = report.get("full_text") or ""
+            if ft:
+                tokens = list(tokens) + ft.split("\n")
+            detected_gtin = gtin_lookup.find_gtin_in_tokens(tokens)
+            if detected_gtin:
+                gtin = detected_gtin
+                pm = db.query(ProductMasterDB).filter(ProductMasterDB.gtin == gtin).first()
+                if pm:
+                    gtin_data = {
+                        "found": True,
+                        "gtin": gtin,
+                        "brand": pm.brand,
+                        "product_name": pm.product_name,
+                        "net_weight": pm.standard_net_quantity or pm.net_quantity,
+                        "mrp": pm.expected_mrp_max or pm.standard_mrp,
+                    }
+                else:
+                    gtin_data = gtin_lookup.lookup_gtin(gtin)
+                    if gtin_data and "gtin" not in gtin_data:
+                        gtin_data["gtin"] = gtin
+
+        # 4. Check for annotated image
         annotated_name = f"ensemble_{scan_id}_result.png"
         annotated_path = os.path.join(UPLOAD_DIR, annotated_name)
         image_uri = f"/uploads/{annotated_name}" if os.path.exists(annotated_path) else f"/uploads/{os.path.basename(file_path)}"
 
-        # 4. Map report to frontend contract
+        # 5. Map report to frontend contract
         scan_record = pipeline_report_to_scan_record(report, scan_id, image_uri, gtin_data)
+
 
         # 5. Persist to database
         db_row = ScanRecordDB(

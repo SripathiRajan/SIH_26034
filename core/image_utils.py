@@ -83,6 +83,49 @@ def check_glare(image_path: str, threshold: float = 0.18) -> Tuple[bool, float]:
     return ratio <= threshold, round(ratio, 4)
 
 
+def crop_region_around_keyword(
+    image_path: str,
+    keyword_bbox: list,
+    padding_px: int = 80,
+) -> str:
+    """
+    Layer 4 – Targeted Crop Re-OCR.
+
+    Crops a padded region around `keyword_bbox` (a list of [x, y] points)
+    from `image_path` and writes it to a temp file for focused OCR.
+
+    Returns path to the cropped image, or the original path if it fails.
+    The caller is responsible for deleting the temp file after use.
+    """
+    img = cv2.imread(image_path)
+    if img is None or not keyword_bbox:
+        return image_path
+
+    pts = np.array(keyword_bbox, dtype=np.float32)
+    x1 = max(0, int(pts[:, 0].min()) - padding_px)
+    y1 = max(0, int(pts[:, 1].min()) - padding_px)
+    x2 = min(img.shape[1], int(pts[:, 0].max()) + padding_px)
+    y2 = min(img.shape[0], int(pts[:, 1].max()) + padding_px)
+
+    if x2 <= x1 or y2 <= y1:
+        return image_path
+
+    crop = img[y1:y2, x1:x2]
+
+    # Apply CLAHE + unsharp mask to the crop for better OCR on faint text
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    blurred = cv2.GaussianBlur(enhanced, (0, 0), 3)
+    sharpened = cv2.addWeighted(enhanced, 1.5, blurred, -0.5, 0)
+    crop_bgr = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
+
+    base, ext = os.path.splitext(image_path)
+    crop_path = f"{base}_crop_{x1}_{y1}{ext}"
+    cv2.imwrite(crop_path, crop_bgr)
+    return crop_path
+
+
 def deskew_perspective(image_path: str) -> str:
     """
     Detects the dominant rectangular boundary of a product label and corrects

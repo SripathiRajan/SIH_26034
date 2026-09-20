@@ -4,7 +4,7 @@ LLM synthesis via Groq (primary) or Google GenAI (Gemini), with statutory fallba
 """
 
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -26,6 +26,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 class ChatRequest(BaseModel):
     message: str
+    scan_context: Optional[Dict[str, Any]] = None
 
 
 class ChatResponse(BaseModel):
@@ -70,11 +71,12 @@ def chat_endpoint(req: ChatRequest):
     synthesizing with Gemini if configured, or falling back to local statutory templates.
     """
     query = req.message.strip()
+    scan_context = req.scan_context
     now_iso = datetime.now(IST).isoformat()
     llm_generated = False
 
     try:
-        res = _rag_assistant.answer_query(query)
+        res = _rag_assistant.answer_query(query, scan_context=scan_context)
         reply = res.get("answer", "")
         citations = res.get("citations", [])
         llm_generated = res.get("llm_generated", False)

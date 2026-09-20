@@ -24,7 +24,7 @@ export type RootStackParamList = {
   Processing: { imageUri?: string };
   Result: { scanData?: any; scanId?: string };
   History: undefined;
-  Assistant: undefined;
+  Assistant: { scanData?: any; scanId?: string; initialQuery?: string } | undefined;
   Dashboard: undefined;
   Rules: undefined;
 };

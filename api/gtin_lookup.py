@@ -37,6 +37,33 @@ def clean_net_qty(raw_qty: str) -> Optional[str]:
         return f"{match.group(1)} {match.group(2).lower()}"
     return raw_qty.strip()
 
+def is_valid_gtin(code: str) -> bool:
+    """Validates EAN-8, UPC-A (12), EAN-13, or GTIN-14 check digit using GS1 standard algorithm."""
+    code = re.sub(r"\D", "", str(code or ""))
+    if len(code) not in (8, 12, 13, 14):
+        return False
+    digits = [int(c) for c in code]
+    check = digits[-1]
+    payload = digits[:-1]
+    weighted_sum = sum(d * (3 if i % 2 == 0 else 1) for i, d in enumerate(reversed(payload)))
+    expected_check = (10 - (weighted_sum % 10)) % 10
+    return check == expected_check
+
+def find_gtin_in_tokens(tokens: list) -> Optional[str]:
+    """Extracts the first valid GTIN/EAN-13/UPC barcode token from OCR results."""
+    candidates = []
+    for tok in tokens:
+        if not tok:
+            continue
+        for match in re.finditer(r"\b(\d{8}|\d{12,14})\b", str(tok)):
+            code = match.group(1)
+            if is_valid_gtin(code):
+                if code.startswith("890") and len(code) == 13:
+                    return code
+                candidates.append(code)
+    return candidates[0] if candidates else None
+
+
 def lookup_gtin(barcode: str) -> Dict[str, Any]:
     """Look up a barcode (EAN-13/UPC/GTIN) in local cache, then Open Food Facts."""
     barcode = str(barcode).strip().replace(" ", "").replace("-", "")
@@ -86,6 +113,10 @@ def lookup_gtin(barcode: str) -> Dict[str, Any]:
                     net_qty = clean_net_qty(str(raw_qty)) if raw_qty else None
                     categories = prod.get("categories") or ""
 
+                    generic = prod.get("generic_name") or prod.get("generic_name_en") or ""
+                    if generic and (not product_name or product_name.strip().lower() == brand.strip().lower()):
+                        product_name = f"{brand} {generic.strip().title()}".strip()
+
                     # Save in cache
                     try:
                         conn = sqlite3.connect(DB_PATH)
@@ -112,7 +143,8 @@ def lookup_gtin(barcode: str) -> Dict[str, Any]:
                         "raw_data": {
                             "ingredients_text": prod.get("ingredients_text"),
                             "countries": prod.get("countries"),
-                            "labels": prod.get("labels")
+                            "labels": prod.get("labels"),
+                            "generic_name": generic
                         }
                     }
         except Exception as e:
@@ -131,8 +163,15 @@ def lookup_gtin(barcode: str) -> Dict[str, Any]:
             "product_name": "Vanilla Custard Powder",
             "declared_net_qty": "100 g",
             "expected_mrp_range": {"min": 40.0, "max": 65.0}
+        },
+        "8901808000068": {
+            "brand": "Weikfield",
+            "product_name": "Vanilla Custard Powder",
+            "declared_net_qty": "100 g",
+            "expected_mrp_range": {"min": 35.0, "max": 60.0}
         }
     }
+
 
     if barcode in known_indian_products:
         item = known_indian_products[barcode]

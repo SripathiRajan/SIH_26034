@@ -55,6 +55,35 @@ class ApiClient {
       }
     }
     list.push(...portSwapped);
+
+    // Always ensure local dev ports 8001 and 8000 are in candidates
+    const localHosts = ['127.0.0.1', 'localhost'];
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
+      const h = window.location.hostname;
+      if (h && !localHosts.includes(h)) {
+        localHosts.unshift(h);
+      }
+    }
+    for (const h of localHosts) {
+      const p8001 = `http://${h}:8001`;
+      const p8000 = `http://${h}:8000`;
+      if (!list.includes(p8001)) list.push(p8001);
+      if (!list.includes(p8000)) list.push(p8000);
+    }
+
+    // If EXPO_PUBLIC_API_URL is configured (e.g. Azure cloud URL), include as fallback
+    if (process.env.EXPO_PUBLIC_API_URL) {
+      const envUrl = process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '');
+      if (envUrl && !list.includes(envUrl)) {
+        list.push(envUrl);
+      }
+    }
+
+    // On web, include relative path '' as fallback to support Azure/Nginx reverse proxy
+    if (Platform.OS === 'web' && !list.includes('')) {
+      list.push('');
+    }
+
     return Array.from(new Set(list));
   }
 
@@ -68,9 +97,43 @@ class ApiClient {
     return null;
   }
 
+  private probed: boolean = false;
+
+  /**
+   * Fast health check probe to guarantee this.baseUrl points to a responsive backend port.
+   * Runs in <10ms for local ports.
+   */
+  public async probeBackend(): Promise<string> {
+    const candidates = this.getCandidateBaseUrls();
+    for (const base of candidates) {
+      if (!base) continue;
+      try {
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 600);
+        const res = await fetch(`${base}/health`, { signal: controller.signal });
+        clearTimeout(tid);
+        if (res.ok) {
+          if (this.baseUrl !== base) {
+            console.info(`[ApiClient] Probed active backend at: ${base}`);
+            this.baseUrl = base;
+          }
+          this.probed = true;
+          return base;
+        }
+      } catch {
+        // continue probing next
+      }
+    }
+    return this.baseUrl;
+  }
+
   public async fetchWithFallback(urlPath: string, init?: RequestInit): Promise<Response> {
     if (urlPath.startsWith('http')) {
       return await fetch(urlPath, init);
+    }
+
+    if (!urlPath.includes('/health') && !this.probed) {
+      await this.probeBackend();
     }
 
     const candidateBases = this.getCandidateBaseUrls();
@@ -84,6 +147,7 @@ class ApiClient {
         if (base !== this.baseUrl) {
           console.info(`[ApiClient] Auto-switched active backend URL from ${this.baseUrl} to: ${base}`);
           this.baseUrl = base;
+          this.probed = true;
         }
         return res;
       } catch (err: any) {
@@ -94,6 +158,8 @@ class ApiClient {
       }
     }
 
+    // Reset probed state so next request will re-probe in case backend restarted
+    this.probed = false;
     throw lastError || new Error('All backend fallback URLs unreachable');
   }
 
@@ -542,7 +608,8 @@ class ApiClient {
    * Synthesis: Groq (primary) or Gemini with statutory-template fallback.
    */
   public async askAssistant(
-    question: string
+    question: string,
+    scanContext?: any
   ): Promise<{ answer: string; sources: string[]; llmGenerated?: boolean }> {
     try {
       const controller = new AbortController();
@@ -553,7 +620,7 @@ class ApiClient {
           'Content-Type': 'application/json',
           ...this.getHeaders(),
         },
-        body: JSON.stringify({ message: question }),
+        body: JSON.stringify({ message: question, scan_context: scanContext }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);

@@ -126,6 +126,67 @@ def ensemble_scan(
                         except Exception:
                             pass
 
+            # ── Stage 2.6: Layer 4 — Targeted Crop Re-OCR ────────────────────
+            # For each field still missing, find its label keyword in the
+            # existing OCR results, crop a focused 80px-padded patch around it,
+            # apply CLAHE, and re-run PaddleOCR on just that crop.
+            # This catches F1/F3 failures in small micro-printed zones without
+            # triggering the expensive VLM fallback.
+            from core.image_utils import crop_region_around_keyword
+            from pipeline.field_extractor import get_neighbours
+
+            # Keyword seeds per mandatory field (common label keywords on Indian packs)
+            FIELD_SEED_KEYWORDS = {
+                "manufacture_date": ["MFG", "MFD", "PKD", "PKGD", "DOM", "DATE OF PKG", "PACKING"],
+                "use_by": ["USE BY", "BEST BEFORE", "EXPIRY", "EXP", "BB"],
+                "fssai": ["FSSAI", "LIC NO", "LIC. NO", "FSSAI LIC"],
+                "mrp": ["MRP", "M.R.P", "MAX RETAIL", "MAXIMUM RETAIL"],
+                "net_quantity": ["NET QTY", "NET WT", "NET WEIGHT", "NET CONTENT", "NET"],
+                "consumer_care": ["CONSUMER CARE", "CARE NUMBER", "TOLL FREE", "HELPLINE"],
+                "manufacturer": ["MARKETED BY", "MANUFACTURED BY", "PACKED BY", "MFG BY"],
+                "country_of_origin": ["COUNTRY OF ORIGIN", "ORIGIN", "PRODUCT OF"],
+            }
+
+            fields_s25, _, flap_s25 = extract_fields(all_results)
+            still_missing = [
+                k for k, v in fields_s25.items()
+                if not v["found"] and not (flap_s25.get("flap_detected") and k in {"mrp", "manufacture_date", "use_by", "net_quantity"})
+            ]
+
+            crop_paths_to_cleanup = []
+            for missing_key in still_missing:
+                seeds = FIELD_SEED_KEYWORDS.get(missing_key, [])
+                found_bbox = None
+                for seed in seeds:
+                    neighbours = get_neighbours(seed, all_results, radius_px=200)
+                    if neighbours:
+                        # Use the seed region's bbox directly
+                        seed_region = next(
+                            (r for r in all_results if seed.lower() in r.get("text", "").lower()),
+                            neighbours[0]
+                        )
+                        found_bbox = seed_region.get("box")
+                        break
+
+                if found_bbox:
+                    try:
+                        crop_path = crop_region_around_keyword(active_path, found_bbox, padding_px=100)
+                        if crop_path != active_path:
+                            crop_paths_to_cleanup.append(crop_path)
+                            crop_results = run_paddle_ocr(crop_path)
+                            if crop_results:
+                                logger.info(f"  ✓ Stage 2.6 crop re-OCR [{missing_key}]: {len(crop_results)} regions from patch")
+                                all_results.extend(crop_results)
+                    except Exception as e:
+                        logger.warning(f"  Stage 2.6 crop re-OCR [{missing_key}] skipped: {e}")
+
+            for cp in crop_paths_to_cleanup:
+                try:
+                    if os.path.exists(cp):
+                        os.remove(cp)
+                except Exception:
+                    pass
+
         # ── Stage 3: Tier 3 VLM (auto-triggered if ANY field is missing) ─
         fields_s3, _, flap_s3 = extract_fields(all_results)
         any_missing = [
@@ -186,12 +247,15 @@ def ensemble_scan(
         final_fields, full_text, flap_info = extract_fields(merged)
         elapsed = time.time() - t_start
         report = generate_compliance_report(final_fields, flap_info, image_path, elapsed)
+        report["full_text"] = full_text
+        report["raw_ocr_tokens"] = [r.get("text", "") for r in merged if r.get("text")]
 
         if save_annotation:
             save_annotated_image(image_path, merged, report)
 
         logger.info(f"Completed in {elapsed:.2f}s | {report['compliance_score']}% | {report['overall_status']}")
         return report
+
 
     finally:
         # Clean up temp files in correct order

@@ -24,6 +24,7 @@ import { api } from '../api/client';
 import { exportReportAsPdf } from '../services/reportExporter';
 
 import DottedBackground from '../components/DottedBackground';
+import { setChatScanContext } from '../services/chatContext';
 
 interface Props {
   navigation: any;
@@ -468,7 +469,15 @@ export default function ResultScreen({ navigation, route }: Props) {
 
         <TouchableOpacity
           style={styles.primaryActionBtn}
-          onPress={() => navigation.navigate('Assistant')}
+          onPress={() => {
+            const payload = {
+              ...scan,
+              imageUris: imageUris.length > 0 ? imageUris : (scan?.imageUri ? [normalizeImageUri(scan.imageUri)] : []),
+              imageUri: activeImageUri || (imageUris.length > 0 ? imageUris[0] : normalizeImageUri(scan?.imageUri)),
+            };
+            setChatScanContext(payload);
+            navigation.navigate('Assistant', { scanData: payload, scanId: scan?.id });
+          }}
           activeOpacity={0.8}
         >
           <Text style={styles.primaryActionText}>Ask Assistant About This Report</Text>

@@ -9,22 +9,51 @@ import { Platform } from 'react-native';
  * - Physical Device (Expo Go): Replace with your machine's LAN IP (e.g., http://192.168.1.5:8000)
  */
 const getBaseUrl = (): string => {
-  // On web, if served over HTTPS but backend is HTTP, use relative origin to leverage reverse proxy and avoid mixed content
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.protocol === 'https:') {
-    return '';
-  }
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
-  }
-  // On web, match the origin host or use 127.0.0.1 to avoid Windows IPv6 (::1) loopback refusal
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
-    const host = window.location.hostname;
-    const protocol = window.location.protocol || 'http:';
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return `${protocol}//127.0.0.1:8000`;
+  // 1. Web browser environment
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    const host = window.location?.hostname || '';
+    const protocol = window.location?.protocol || 'http:';
+
+    // Check if running locally or on a private development network
+    const isLocalOrLan =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '[::1]' ||
+      host.endsWith('.local') ||
+      host.startsWith('10.') ||
+      host.startsWith('192.168.') ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+
+    if (isLocalOrLan) {
+      // Prioritize port 8001 / 8000 for local development
+      return `${protocol}//127.0.0.1:8001`;
     }
+
+    // When hosted in Azure or other cloud environments:
+    // Check configured environment variable first
+    if (process.env.EXPO_PUBLIC_API_URL) {
+      const envUrl = process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '');
+      // If frontend is HTTPS and backend URL is HTTP on the same host, use relative to avoid mixed content
+      if (protocol === 'https:' && envUrl.startsWith('http://') && envUrl.includes(host)) {
+        return '';
+      }
+      return envUrl;
+    }
+
+    // If served over HTTPS on Azure without explicit API URL, use relative path (reverse proxy)
+    if (protocol === 'https:') {
+      return '';
+    }
+
+    // If directly accessed on Azure host by IP/domain without reverse proxy
     return `${protocol}//${host}:8000`;
   }
+
+  // 2. Native mobile apps (Android emulator / iOS simulator / production APK)
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '');
+  }
+
   return (Platform.select({
     android: 'http://10.0.2.2:8000',
     ios: 'http://127.0.0.1:8000',

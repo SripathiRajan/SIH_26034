@@ -62,23 +62,41 @@ def _product_info(fields: Dict, gtin_data: Optional[Dict]) -> Dict[str, str]:
     if gtin_data and gtin_data.get("found"):
         product_name = gtin_data.get("product_name") or product_name
         brand        = gtin_data.get("brand")         or brand
+        raw_prod     = gtin_data.get("raw_data") or {}
+        generic      = raw_prod.get("generic_name") or ""
+        if generic and (product_name.strip().lower() == brand.strip().lower() or product_name == "Unknown Product"):
+            product_name = f"{brand} {generic.strip().title()}".strip()
 
     mfg = fields.get("manufacturer", {})
     if mfg.get("found") and brand == "Unknown Brand":
         raw = mfg.get("captured") or mfg.get("value") or ""
         import re
         cleaned = re.sub(r"^(?:manufactured(?:\s*&\s*marketed)?|marketed|packed|mfg|mfd)\s+by[:\s]*", "", raw, flags=re.I).strip()
-        cleaned = re.sub(r"^[\(\[\{I\|l][A-Za-z0-9][\)\]\}I\|l]\s*", "", cleaned).strip()
-        cleaned = re.sub(r"^\([A-Za-z0-9]\)\s*", "", cleaned).strip()
-        if cleaned:
-            brand        = cleaned[:50].strip()
-            product_name = cleaned[:100].strip()
+        cleaned = re.sub(r"^[\(\[\{I\|l1\s]{1,4}[A-Za-z0-9]?[\]\)\}\s]*", "", cleaned).strip()
+        cleaned = re.sub(r"^\([A-Za-z0-9]+\)\s*", "", cleaned).strip()
+        first_line = cleaned.split("\n")[0].strip() if cleaned else ""
+        if first_line:
+            clean_brand = re.sub(
+                r"[\s\.,_-]*(?:foods|products|consumer|enterprises|industries)?[\s\.,_-]*(?:pvt\.?|private)?[\s\.,_-]*(?:ltd\.?|limited|llp|inc\.?|corp\.?)\b.*$",
+                "",
+                first_line,
+                flags=re.I
+            ).strip()
+            if clean_brand and len(clean_brand) > 1:
+                brand = clean_brand.title()
+                if product_name == "Unknown Product":
+                    product_name = brand
+            else:
+                brand = first_line[:50].strip()
+                if product_name == "Unknown Product":
+                    product_name = brand
 
     qty = fields.get("net_quantity", {})
     if qty.get("found"):
         net_weight = qty.get("captured") or qty.get("value") or ""
 
     return {"productName": product_name, "brand": brand, "netWeight": net_weight}
+
 
 
 def _build_field_checks(fields: Dict) -> List[Dict]:

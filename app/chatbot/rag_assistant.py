@@ -71,27 +71,79 @@ class RAGAssistant:
         ]
         self.vector_store.add_documents(faq_data)
 
-    def answer_query(self, query: str) -> Dict[str, Any]:
+    def _format_scan_context(self, sc: Dict[str, Any]) -> str:
+        lines = ["ACTIVE INSPECTION REPORT UNDER AUDIT:"]
+        scan_id = sc.get("id") or sc.get("scan_id") or sc.get("scanId") or ""
+        p_name = sc.get("product_name") or sc.get("productName") or "Unknown Product"
+        brand = sc.get("brand") or "Unknown Brand"
+        net_wt = sc.get("net_weight") or sc.get("netWeight") or "N/A"
+        status = sc.get("status") or "N/A"
+        score = sc.get("compliance_score") or sc.get("complianceConfidence") or "N/A"
+
+        if scan_id:
+            lines.append(f"- Inspection ID: {scan_id}")
+        lines.append(f"- Product: {p_name}")
+        lines.append(f"- Brand: {brand}")
+        lines.append(f"- Declared Net Quantity: {net_wt}")
+        lines.append(f"- Overall Compliance Status: {str(status).upper()} ({score}% Confidence)")
+
+        images = sc.get("imageUris") or ([sc.get("imageUri")] if sc.get("imageUri") else [])
+        if images:
+            lines.append(f"- Captured Image Views ({len(images)}): {', '.join(str(img) for img in images)}")
+
+        fields = sc.get("fields") or []
+        if isinstance(fields, list) and fields:
+            lines.append("- Statutory Declarations Audited:")
+            for f in fields:
+                if isinstance(f, dict):
+                    f_name = f.get("label") or f.get("fieldName") or "Field"
+                    f_st = str(f.get("status", "unknown")).upper()
+                    f_val = f.get("extractedValue") or f.get("extractedText") or f.get("value") or "N/A"
+                    f_viol = f.get("violationReason") or ""
+                    f_rule = f.get("ruleRef") or f.get("ruleCitation") or ""
+                    viol_note = f" (Issue: {f_viol})" if f_viol else ""
+                    rule_note = f" [{f_rule}]" if f_rule else ""
+                    lines.append(f"  * {f_name}: {f_st} | Value: '{f_val}'{rule_note}{viol_note}")
+        elif isinstance(fields, dict) and fields:
+            lines.append("- Statutory Declarations Audited:")
+            for k, v in fields.items():
+                if isinstance(v, dict):
+                    f_name = v.get("label", k)
+                    f_st = "PASS" if v.get("found") and v.get("is_valid", True) else ("WARNING" if v.get("location") == "SEE_FLAP" else "FAIL")
+                    f_val = v.get("value") or v.get("captured") or "N/A"
+                    lines.append(f"  * {f_name}: {f_st} | Value: '{f_val}'")
+        return "\n".join(lines)
+
+    def answer_query(self, query: str, scan_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Answers a user query using vector search over statutory provisions,
         enriched with Gemini LLM generation if GEMINI_API_KEY is configured,
         or statutory template fallback if unconfigured or unavailable.
+        Optionally incorporates active scan inspection context & captured images.
         """
         retrieved_docs: List[Dict[str, Any]] = self.vector_store.search(query, top_k=3)
-        if not retrieved_docs:
+        citations = [d.get("source") for d in (retrieved_docs or []) if d.get("source")]
+        context = "\n".join(f"- {d.get('title')}: {d.get('text')}" for d in (retrieved_docs or []))
+
+        scan_summary = self._format_scan_context(scan_context) if scan_context else ""
+
+        if not retrieved_docs and not scan_context:
             return {
                 "answer": "No relevant Legal Metrology clause found in the local knowledge base.",
                 "citations": [],
                 "llm_generated": False,
             }
 
-        citations = [d.get("source") for d in retrieved_docs if d.get("source")]
-        context = "\n".join(f"- {d.get('title')}: {d.get('text')}" for d in retrieved_docs)
-        template_answer = f"According to statutory provisions:\n{context}"
+        template_parts = []
+        if scan_summary:
+            template_parts.append(scan_summary)
+        if context:
+            template_parts.append(f"According to statutory provisions:\n{context}")
+        template_answer = "\n\n".join(template_parts)
 
         # Provider-agnostic synthesis: Groq (primary) -> Gemini (secondary) -> statutory template.
         if settings.is_groq_configured:
-            synthesized = self._synthesize_groq(query, context)
+            synthesized = self._synthesize_groq(query, context, scan_context=scan_context)
             if synthesized:
                 return {
                     "answer": synthesized,
@@ -107,7 +159,7 @@ class RAGAssistant:
 
         if self._client is not None:
             try:
-                prompt = self._build_prompt(query, context)
+                prompt = self._build_prompt(query, context, scan_context=scan_context)
                 response = self._client.models.generate_content(
                     model=settings.GEMINI_MODEL,
                     contents=prompt,
@@ -131,18 +183,25 @@ class RAGAssistant:
             "llm_generated": False,
         }
 
-    def _build_prompt(self, query: str, context: str) -> str:
+    def _build_prompt(self, query: str, context: str, scan_context: Optional[Dict[str, Any]] = None) -> str:
+        scan_sec = ""
+        if scan_context:
+            scan_sec = f"\n{self._format_scan_context(scan_context)}\n"
+
         return (
-            "You are an expert Legal Metrology Compliance Officer assistant for PRAMAN.\n"
+            "You are an expert Legal Metrology Compliance Officer assistant for PRAMAN v4.\n"
+            f"{scan_sec}"
             f"User Question: \"{query}\"\n\n"
             f"Statutory Context & Gazette Provisions:\n{context}\n\n"
             "Instructions:\n"
+            "- If active inspection data is provided above, refer directly to this specific product, its declarations, detected issues (e.g. flap pointers, missing details), and captured images.\n"
             "- Provide a clear, authoritative, and concise compliance answer based strictly on the statutory provisions and gazette rules above.\n"
-            "- Cite the relevant Rule numbers (e.g. Rule 6(1)(e), Rule 6(2)) and gazette notifications where applicable.\n"
+            "- Cite the relevant Rule numbers (e.g. Rule 6(1)(e), Rule 6(2), Section 36) and gazette notifications where applicable.\n"
+            "- If a declaration is pointed to the bottom flap (e.g. 'See bottom of pack'), explain that photographing the bottom face is permitted and required under Rule 6 to verify the printed stamp.\n"
             "- If the context does not fully answer the question, state what the rules specify and clarify the limits."
         )
 
-    def _synthesize_groq(self, query: str, context: str) -> Optional[str]:
+    def _synthesize_groq(self, query: str, context: str, scan_context: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
         Synthesizes an answer with Groq's OpenAI-compatible chat completions API.
         SECURITY: Sends the key only in the Authorization header; never logs it.
@@ -172,13 +231,13 @@ class RAGAssistant:
                             "role": "system",
                             "content": (
                                 "You are an expert Legal Metrology Compliance Officer assistant for PRAMAN. "
-                                "Answer strictly from the supplied statutory context, cite Rule numbers and "
+                                "Answer strictly from the supplied statutory context and active inspection data, cite Rule numbers and "
                                 "gazette notifications, and state limits when the context is insufficient."
                             ),
                         },
                         {
                             "role": "user",
-                            "content": self._build_prompt(query, context),
+                            "content": self._build_prompt(query, context, scan_context=scan_context),
                         },
                     ],
                     "temperature": 0.2,

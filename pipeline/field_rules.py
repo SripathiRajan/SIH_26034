@@ -62,7 +62,7 @@ MANDATORY_FIELDS = {
     "fssai": {
         "label": "FSSAI License Number",
         "pattern": re.compile(
-            r"(?:fssai|fsat|fssal|issai|lic(?:ense)?\.?\s*(?:no\.?)?|lic\s*#)[\s\S]{0,30}?[:\-]?\s*([0-9\s]{14,20})|\b([12]\d{13}|\d{14})\b",
+            r"(?:fssai|fsat|fssal|issai|lic(?:ense)?\.?\s*(?:no\.?)?|lic\s*#)[\s\S]{0,30}?[:\-]?\s*([0-9\s]{10,20})|\b([12]\d{13}|\d{14})\b",
             re.IGNORECASE
         ),
         "rule": "FSS (Labelling and Display) Regulations 2020 §2.1.1"
