@@ -239,27 +239,27 @@ class ApiClient {
   ): Promise<void> {
     if (Platform.OS === 'web') {
       let blob: Blob | null = null;
-      if (imageUri.startsWith('data:')) {
-        try {
-          const arr = imageUri.split(',');
-          const mimeMatch = arr[0].match(/:(.*?);/);
-          const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-          const bstr = atob(arr[1].trim());
-          let n = bstr.length;
-          const u8arr = new Uint8Array(n);
-          while (n--) {
-            u8arr[n] = bstr.charCodeAt(n);
+      // In modern browsers, native fetch() decodes data:, blob:, and http: URLs natively in C++
+      try {
+        const blobRes = await fetch(imageUri);
+        blob = await blobRes.blob();
+      } catch {
+        // Fallback for environments where fetch(data:) is unsupported
+        if (imageUri.startsWith('data:')) {
+          try {
+            const arr = imageUri.split(',');
+            const mimeMatch = arr[0].match(/:(.*?);/);
+            const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+            const bstr = atob(arr[1].trim());
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while (n--) {
+              u8arr[n] = bstr.charCodeAt(n);
+            }
+            blob = new Blob([u8arr], { type: mime });
+          } catch (e) {
+            console.warn('[ApiClient] Failed to convert data URI to blob:', e);
           }
-          blob = new Blob([u8arr], { type: mime });
-        } catch (e) {
-          console.warn('[ApiClient] Failed to convert data URI to blob:', e);
-        }
-      } else if (imageUri.startsWith('blob:') || imageUri.startsWith('http')) {
-        try {
-          const blobRes = await fetch(imageUri);
-          blob = await blobRes.blob();
-        } catch (e) {
-          console.warn('[ApiClient] Failed to fetch image blob on web:', e);
         }
       }
       if (blob) {
