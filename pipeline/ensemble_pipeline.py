@@ -15,6 +15,27 @@ from pipeline.field_rules import MANDATORY_FIELDS, VLM_CRITICAL_FIELDS
 from pipeline.field_extractor import extract_fields
 from pipeline.compliance_engine import generate_compliance_report
 
+FLAP_TARGET_FIELDS = {"mrp", "manufacture_date", "use_by", "net_quantity"}
+
+FIELD_SEED_KEYWORDS: Dict[str, List[str]] = {
+    "manufacture_date": ["MFG", "MFD", "PKD", "PKGD", "DOM", "DATE OF PKG", "PACKING"],
+    "use_by": ["USE BY", "BEST BEFORE", "EXPIRY", "EXP", "BB"],
+    "fssai": ["FSSAI", "LIC NO", "LIC. NO", "FSSAI LIC"],
+    "mrp": ["MRP", "M.R.P", "MAX RETAIL", "MAXIMUM RETAIL"],
+    "net_quantity": ["NET QTY", "NET WT", "NET WEIGHT", "NET CONTENT", "NET"],
+    "consumer_care": ["CONSUMER CARE", "CARE NUMBER", "TOLL FREE", "HELPLINE"],
+    "manufacturer": ["MARKETED BY", "MANUFACTURED BY", "PACKED BY", "MFG BY"],
+    "country_of_origin": ["COUNTRY OF ORIGIN", "ORIGIN", "PRODUCT OF"],
+}
+
+def get_unaccounted_fields(fields_dict: Dict[str, Any], flap_info: Dict[str, Any]) -> List[str]:
+    """Returns fields that are still missing and not redirected to a flap pointer."""
+    is_flap = flap_info.get("flap_detected", False)
+    return [
+        k for k, v in fields_dict.items()
+        if not v.get("found") and not (is_flap and k in FLAP_TARGET_FIELDS)
+    ]
+
 def ensemble_scan(
     image_path: str,
     save_annotation: bool = True,
@@ -108,10 +129,7 @@ def ensemble_scan(
 
             # ── Stage 2.5: CLAHE retry for residual missing fields ────────────
             fields_s2, _, flap_s2 = extract_fields(all_results)
-            unaccounted = [
-                k for k, v in fields_s2.items()
-                if not v["found"] and not (flap_s2.get("flap_detected") and k in {"mrp", "manufacture_date", "use_by", "net_quantity"})
-            ]
+            unaccounted = get_unaccounted_fields(fields_s2, flap_s2)
             if unaccounted:
                 logger.info(f"  Stage 2.5: CLAHE retry for {len(unaccounted)} missing fields")
                 enhanced_path = enhance_image(active_path)
@@ -127,31 +145,11 @@ def ensemble_scan(
                             pass
 
             # ── Stage 2.6: Layer 4 — Targeted Crop Re-OCR ────────────────────
-            # For each field still missing, find its label keyword in the
-            # existing OCR results, crop a focused 80px-padded patch around it,
-            # apply CLAHE, and re-run PaddleOCR on just that crop.
-            # This catches F1/F3 failures in small micro-printed zones without
-            # triggering the expensive VLM fallback.
             from core.image_utils import crop_region_around_keyword
             from pipeline.field_extractor import get_neighbours
 
-            # Keyword seeds per mandatory field (common label keywords on Indian packs)
-            FIELD_SEED_KEYWORDS = {
-                "manufacture_date": ["MFG", "MFD", "PKD", "PKGD", "DOM", "DATE OF PKG", "PACKING"],
-                "use_by": ["USE BY", "BEST BEFORE", "EXPIRY", "EXP", "BB"],
-                "fssai": ["FSSAI", "LIC NO", "LIC. NO", "FSSAI LIC"],
-                "mrp": ["MRP", "M.R.P", "MAX RETAIL", "MAXIMUM RETAIL"],
-                "net_quantity": ["NET QTY", "NET WT", "NET WEIGHT", "NET CONTENT", "NET"],
-                "consumer_care": ["CONSUMER CARE", "CARE NUMBER", "TOLL FREE", "HELPLINE"],
-                "manufacturer": ["MARKETED BY", "MANUFACTURED BY", "PACKED BY", "MFG BY"],
-                "country_of_origin": ["COUNTRY OF ORIGIN", "ORIGIN", "PRODUCT OF"],
-            }
-
             fields_s25, _, flap_s25 = extract_fields(all_results)
-            still_missing = [
-                k for k, v in fields_s25.items()
-                if not v["found"] and not (flap_s25.get("flap_detected") and k in {"mrp", "manufacture_date", "use_by", "net_quantity"})
-            ]
+            still_missing = get_unaccounted_fields(fields_s25, flap_s25)
 
             crop_paths_to_cleanup = []
             for missing_key in still_missing:
@@ -189,11 +187,7 @@ def ensemble_scan(
 
         # ── Stage 3: Tier 3 VLM (auto-triggered if ANY field is missing) ─
         fields_s3, _, flap_s3 = extract_fields(all_results)
-        any_missing = [
-            k for k, v in fields_s3.items()
-            if not v["found"]
-            and not (flap_s3.get("flap_detected") and k in {"mrp", "manufacture_date", "use_by", "net_quantity"})
-        ]
+        any_missing = get_unaccounted_fields(fields_s3, flap_s3)
         if any_missing and not session_mode:
             logger.info(f"  Stage 3: VLM fallback auto-triggered — {len(any_missing)} field(s) still missing: {any_missing}")
             try:
@@ -218,25 +212,31 @@ def ensemble_scan(
         try:
             from app.ocr.engine_base import TextPolygon
             from app.extraction.reading_order import ReadingOrderResolver
-            tokens = [
-                TextPolygon(
-                    text=r.get("text", ""),
-                    confidence=float(r.get("confidence", 0.85)),
-                    bbox=r.get("box") or [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
-                    engine=r.get("source", r.get("engine", "ensemble")),
+            indexed_tokens = [
+                (
+                    idx,
+                    TextPolygon(
+                        text=r.get("text", ""),
+                        confidence=float(r.get("confidence", 0.85)),
+                        bbox=r.get("box") or [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                        engine=r.get("source", r.get("engine", "ensemble")),
+                    )
                 )
-                for r in merged
+                for idx, r in enumerate(merged)
                 if r.get("text", "").strip()
             ]
-            if tokens:
-                sorted_tokens = ReadingOrderResolver().sort_tokens(tokens)
+            if indexed_tokens:
+                token_to_idx = {id(t): idx for idx, t in indexed_tokens}
+                sorted_tokens = ReadingOrderResolver().sort_tokens([t for _, t in indexed_tokens])
+                seen_indices = set()
                 ordered_merged = []
                 for t in sorted_tokens:
-                    match = next((r for r in merged if r.get("text") == t.text), None)
-                    if match and match not in ordered_merged:
-                        ordered_merged.append(match)
-                for r in merged:
-                    if r not in ordered_merged:
+                    idx = token_to_idx.get(id(t))
+                    if idx is not None and idx not in seen_indices:
+                        seen_indices.add(idx)
+                        ordered_merged.append(merged[idx])
+                for idx, r in enumerate(merged):
+                    if idx not in seen_indices:
                         ordered_merged.append(r)
                 merged = ordered_merged
                 logger.info(f"  Reading order resolved: {len(merged)} regions structured into visual lines")

@@ -64,6 +64,44 @@ def find_gtin_in_tokens(tokens: list) -> Optional[str]:
     return candidates[0] if candidates else None
 
 
+def resolve_gtin_metadata(db: Any, gtin: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Resolves GTIN metadata by first checking ProductMasterDB, then gtin_cache / Open Food Facts."""
+    if not gtin:
+        return None
+    from core.db_models import ProductMasterDB
+    pm = db.query(ProductMasterDB).filter(ProductMasterDB.gtin == gtin).first()
+    if pm:
+        return {
+            "found": True,
+            "gtin": gtin,
+            "brand": pm.brand,
+            "product_name": pm.product_name,
+            "net_weight": pm.standard_net_quantity or pm.net_quantity,
+            "mrp": pm.expected_mrp_max or pm.standard_mrp,
+            "expected_mrp_range": {
+                "min": pm.expected_mrp_min or 0.0,
+                "max": pm.expected_mrp_max or float("inf"),
+            } if (pm.expected_mrp_min or pm.expected_mrp_max) else None,
+            "declared_net_qty": pm.standard_net_quantity or pm.net_quantity,
+        }
+    data = lookup_gtin(gtin)
+    if data and "gtin" not in data:
+        data["gtin"] = gtin
+    return data
+
+
+def auto_detect_gtin_metadata(db: Any, report: Dict[str, Any]) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """Detects barcode token from OCR results and resolves product metadata if found."""
+    tokens = report.get("raw_ocr_tokens") or []
+    ft = report.get("full_text") or ""
+    if ft:
+        tokens = list(tokens) + ft.split("\n")
+    detected = find_gtin_in_tokens(tokens)
+    if detected:
+        return detected, resolve_gtin_metadata(db, detected)
+    return None, None
+
+
 def lookup_gtin(barcode: str) -> Dict[str, Any]:
     """Look up a barcode (EAN-13/UPC/GTIN) in local cache, then Open Food Facts."""
     barcode = str(barcode).strip().replace(" ", "").replace("-", "")
