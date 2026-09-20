@@ -159,20 +159,36 @@ function ChevronRightIcon({ size = 13, color = 'currentColor' }: { size?: number
   );
 }
 
+function SignOutIcon({ size = 14, color = '#DC2626' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <Path d="M16 17l5-5-5-5" />
+      <Line x1="21" y1="12" x2="9" y2="12" />
+    </Svg>
+  );
+}
+
 export default function HomeScreen({ navigation }: Props) {
   const { width } = useWindowDimensions();
   const isMobile = width < 760;
   const { currentUser, logout } = useAuth();
 
   const handleSignOut = () => {
-    Alert.alert(
-      'Sign Out',
-      `End the session for ${currentUser?.name || 'this officer'}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign Out', style: 'destructive', onPress: () => logout() },
-      ]
-    );
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (window.confirm('Are you sure you want to sign out of PRAMAN?')) {
+        logout();
+      }
+    } else {
+      Alert.alert(
+        'Sign Out',
+        `End the session for ${currentUser?.name || 'this user'}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign Out', style: 'destructive', onPress: () => logout() },
+        ]
+      );
+    }
   };
 
   // Toast state
@@ -413,55 +429,18 @@ export default function HomeScreen({ navigation }: Props) {
     setAnalysisError(null);
   };
 
-  // 6. Analyse captured photos with OCR
-  const handleAnalyse = async () => {
+  // 6. Analyse captured photos with OCR — immediately redirects to inspection processing
+  const handleAnalyse = () => {
     if (photos.length === 0) {
       Alert.alert('No Photos', 'Please take or upload at least 1 photo.');
       return;
     }
-    setIsAnalysing(true);
-    setAnalysisError(null);
-    showToast(`Analyzing ${photos.length} ${photos.length === 1 ? 'view' : 'views'}…`);
-
-    const imageUris = photos.map((p) => p.uri);
-    try {
-      const response = await api.scanSession(imageUris, scanSessionId || undefined);
-      setScanSessionId(response.sessionId);
-      setMergedCoverage(response.mergedCoverage);
-      setCoverageFields(response.fields);
-      showToast(`OCR done: ${response.mergedCoverage.found.length} declarations identified`);
-    } catch (err: any) {
-      console.warn('[HomeScreen] scanSession error:', err);
-      if (DEMO_MODE) {
-        const demoSessId = scanSessionId || `demo-sess-${Date.now()}`;
-        setScanSessionId(demoSessId);
-        const isMulti = photos.length >= 2;
-        const mockCoverage: MergedCoverage = {
-          found: isMulti
-            ? ['net_quantity', 'mrp', 'manufacturer', 'manufacture_date', 'use_by', 'consumer_care', 'fssai', 'country_of_origin']
-            : ['net_quantity', 'mrp', 'manufacturer', 'manufacture_date'],
-          missing: isMulti
-            ? []
-            : ['use_by', 'consumer_care', 'fssai', 'country_of_origin'],
-          hintLine: isMulti
-            ? 'All statutory declarations detected across views'
-            : 'Capture reverse side to inspect use-by, FSSAI and helpline',
-          allFound: isMulti,
-        };
-        setMergedCoverage(mockCoverage);
-        setCoverageFields({
-          mrp: { value: '₹ 145.00', status: 'compliant' },
-          net_quantity: { value: '500 g', status: 'compliant' },
-          manufacturer: { value: 'Hindustan Foods Ltd.', status: 'compliant' },
-          manufacture_date: { value: '02/2025', status: 'compliant' },
-        });
-        showToast('Demo mode: sample OCR analysis generated');
-      } else {
-        setAnalysisError(err.message || 'OCR processing failed. Please verify backend connection.');
-      }
-    } finally {
-      setIsAnalysing(false);
-    }
+    const uris = photos.map((p) => p.uri);
+    navigation.navigate('Processing', {
+      imageUris: uris,
+      imageUri: uris[0],
+      sessionId: scanSessionId || undefined,
+    });
   };
 
   // 7. Navigate to Processing Screen to finalize and view full report
@@ -554,7 +533,7 @@ export default function HomeScreen({ navigation }: Props) {
 
           <View style={styles.topbarRight}>
             <View style={styles.roleChip}>
-              <Text style={styles.roleChipText}>OFFICER</Text>
+              <Text style={styles.roleChipText}>USER</Text>
             </View>
             <TouchableOpacity
               style={styles.avatar}
@@ -564,7 +543,7 @@ export default function HomeScreen({ navigation }: Props) {
               className="inspect-avatar"
             >
               <Text style={styles.avatarText}>
-                {(currentUser?.name || currentUser?.id || 'OFF')
+                {(currentUser?.name || currentUser?.id || 'USR')
                   .trim()
                   .split(/\s+/)
                   .map((w) => w[0])
@@ -572,6 +551,14 @@ export default function HomeScreen({ navigation }: Props) {
                   .slice(0, 4)
                   .toUpperCase()}
               </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.signOutBtn}
+              onPress={handleSignOut}
+              activeOpacity={0.8}
+            >
+              <SignOutIcon size={14} color="#EF4444" />
+              <Text style={styles.signOutBtnText}>Sign Out</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -619,33 +606,6 @@ export default function HomeScreen({ navigation }: Props) {
 
               {photos.length > 0 && (
                 <TouchableOpacity
-                  style={[
-                    styles.actionBtn,
-                    styles.actionAnalyse,
-                    isAnalysing && styles.actionAnalyseDisabled,
-                    isMobile && styles.actionBtnMobile,
-                  ]}
-                  onPress={handleAnalyse}
-                  disabled={isAnalysing}
-                  activeOpacity={0.85}
-                  // @ts-ignore
-                  className="inspect-btn"
-                >
-                  {isAnalysing ? (
-                    <ActivityIndicator size="small" color="#062E28" />
-                  ) : (
-                    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#062E28" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                      <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                    </Svg>
-                  )}
-                  <Text style={styles.actionAnalyseText}>
-                    {isAnalysing ? 'Running OCR…' : `Analyse (${photos.length})`}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {photos.length > 0 && !isAnalysing && (
-                <TouchableOpacity
                   style={[styles.actionBtn, styles.actionClear, isMobile && styles.actionBtnMobile]}
                   onPress={handleClearAll}
                   activeOpacity={0.85}
@@ -653,7 +613,7 @@ export default function HomeScreen({ navigation }: Props) {
                   className="inspect-btn"
                 >
                   <TrashIcon size={14} color="#FF7B7B" />
-                  <Text style={styles.actionClearText}>Clear</Text>
+                  <Text style={styles.actionClearText}>Clear ({photos.length})</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -753,6 +713,22 @@ export default function HomeScreen({ navigation }: Props) {
                     </TouchableOpacity>
                   )}
                 </ScrollView>
+
+                {/* Prominent Analyse Button inside Captured Views Section */}
+                <TouchableOpacity
+                  style={styles.panelAnalyseBtn}
+                  onPress={handleAnalyse}
+                  activeOpacity={0.85}
+                  // @ts-ignore
+                  className="inspect-btn"
+                >
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#062E28" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                  </Svg>
+                  <Text style={styles.panelAnalyseBtnText}>
+                    Analyse Package ({photos.length} {photos.length === 1 ? 'view' : 'views'}) →
+                  </Text>
+                </TouchableOpacity>
 
                 {/* Analysis Loading State */}
                 {isAnalysing && (
@@ -1007,6 +983,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '600',
+  },
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginLeft: 6,
+  },
+  signOutBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#FF6B6B',
   },
 
   /* Hero styles */
@@ -1326,6 +1319,28 @@ const styles = StyleSheet.create({
   },
 
   /* Analysis states */
+  panelAnalyseBtn: {
+    backgroundColor: '#00C2A8',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    marginTop: 8,
+    shadowColor: '#00C2A8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  panelAnalyseBtnText: {
+    color: '#062E28',
+    fontSize: 14.5,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
   analysisLoadingBox: {
     flexDirection: 'row',
     alignItems: 'center',

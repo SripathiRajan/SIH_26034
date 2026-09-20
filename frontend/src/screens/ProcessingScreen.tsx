@@ -24,16 +24,16 @@ export default function ProcessingScreen({ navigation, route }: Props) {
   const sessionId = route.params?.sessionId;
   const imageUris = route.params?.imageUris;
   const isSessionMode = Boolean(sessionId);
-  const isMultiAngle = Boolean(sessionId && Array.isArray(imageUris) && imageUris.length > 1);
+  const isMultiAngle = Boolean(Array.isArray(imageUris) && imageUris.length > 1);
 
   useEffect(() => {
     let isMounted = true;
 
-    if (isSessionMode && sessionId) {
-      const viewCount = Array.isArray(imageUris) ? imageUris.length : 1;
+    if (Array.isArray(imageUris) && imageUris.length > 0) {
+      const viewCount = imageUris.length;
       setExtractedLogs([
-        `Multi-angle session: ${sessionId.slice(0, 8)}...`,
-        `Synthesizing declarations across ${viewCount} captured package views...`,
+        `Statutory inspection: synthesizing declarations across ${viewCount} view${viewCount === 1 ? '' : 's'}...`,
+        'Running multi-engine statutory OCR and Rule 6 entity parsing...',
       ]);
 
       setCurrentStageIndex(1);
@@ -41,10 +41,25 @@ export default function ProcessingScreen({ navigation, route }: Props) {
         if (isMounted) {
           setCurrentStageIndex((prev) => Math.min(prev + 1, OCR_PIPELINE_STAGES.length - 1));
         }
-      }, 450);
+      }, 700);
 
-      api.finalizeSession(sessionId)
-        .then((resultScan) => {
+      (async () => {
+        try {
+          let activeSessionId = sessionId;
+          if (!activeSessionId) {
+            const sessRes = await api.scanSession(imageUris);
+            activeSessionId = sessRes.sessionId;
+            if (isMounted) {
+              setExtractedLogs((prev) => [
+                ...prev,
+                `Session established: ${sessRes.sessionId.slice(0, 10)}...`,
+                `Identified ${sessRes.mergedCoverage?.found?.length || 0} statutory declarations across captured views.`,
+              ]);
+              setCurrentStageIndex(2);
+            }
+          }
+
+          const resultScan = await api.finalizeSession(activeSessionId);
           clearInterval(stageTimer);
           if (isMounted) {
             setCurrentStageIndex(OCR_PIPELINE_STAGES.length);
@@ -52,7 +67,7 @@ export default function ProcessingScreen({ navigation, route }: Props) {
               resultScan.fields.forEach((f) => {
                 setExtractedLogs((prev) => [
                   ...prev,
-                  "Verified " + f.label + ": " + (f.extractedValue || f.extractedText || "DETECTED") + " [" + f.status.toUpperCase() + "]"
+                  "Verified " + f.label + ": " + (f.extractedValue || f.extractedText || "DETECTED") + " [" + (f.status || 'pass').toUpperCase() + "]"
                 ]);
               });
             }
@@ -60,8 +75,7 @@ export default function ProcessingScreen({ navigation, route }: Props) {
               navigation.replace('Result', { scanData: resultScan, imageUris });
             }, 600);
           }
-        })
-        .catch((err: any) => {
+        } catch (err: any) {
           clearInterval(stageTimer);
           if (DEMO_MODE) {
             simulateScanPipeline(
@@ -89,6 +103,67 @@ export default function ProcessingScreen({ navigation, route }: Props) {
               setError(err?.message || 'Finalization failed. Backend may be offline or unreachable.');
             }
           }
+        }
+      })();
+
+      return () => {
+        isMounted = false;
+        clearInterval(stageTimer);
+      };
+    } else if (sessionId) {
+      setExtractedLogs([
+        `Multi-angle session: ${sessionId.slice(0, 8)}...`,
+        `Synthesizing declarations across captured package views...`,
+      ]);
+
+      setCurrentStageIndex(1);
+      const stageTimer = setInterval(() => {
+        if (isMounted) {
+          setCurrentStageIndex((prev) => Math.min(prev + 1, OCR_PIPELINE_STAGES.length - 1));
+        }
+      }, 500);
+
+      api.finalizeSession(sessionId)
+        .then((resultScan) => {
+          clearInterval(stageTimer);
+          if (isMounted) {
+            setCurrentStageIndex(OCR_PIPELINE_STAGES.length);
+            if (resultScan.fields && resultScan.fields.length > 0) {
+              resultScan.fields.forEach((f) => {
+                setExtractedLogs((prev) => [
+                  ...prev,
+                  "Verified " + f.label + ": " + (f.extractedValue || f.extractedText || "DETECTED") + " [" + (f.status || 'pass').toUpperCase() + "]"
+                ]);
+              });
+            }
+            setTimeout(() => {
+              navigation.replace('Result', { scanData: resultScan, imageUris });
+            }, 600);
+          }
+        })
+        .catch((err: any) => {
+          clearInterval(stageTimer);
+          if (DEMO_MODE) {
+            simulateScanPipeline(
+              imageUri || '',
+              (stageIdx) => {
+                if (isMounted) setCurrentStageIndex(stageIdx);
+              },
+              (snippet) => {
+                if (isMounted) setExtractedLogs((prev) => [...prev, snippet]);
+              }
+            ).then((resultScan) => {
+              if (isMounted) {
+                setTimeout(() => {
+                  navigation.replace('Result', { scanData: resultScan });
+                }, 500);
+              }
+            });
+          } else {
+            if (isMounted) {
+              setError(err?.message || 'Finalization failed. Backend may be offline or unreachable.');
+            }
+          }
         });
 
       return () => {
@@ -103,7 +178,6 @@ export default function ProcessingScreen({ navigation, route }: Props) {
       ]);
       setCurrentStageIndex(1);
 
-      // Step through progress stages with live feedback while awaiting backend CPU inference
       const stageTimer = setInterval(() => {
         if (isMounted) {
           setCurrentStageIndex((prev) => {
@@ -169,6 +243,17 @@ export default function ProcessingScreen({ navigation, route }: Props) {
     <DottedBackground>
       <DemoBanner />
       <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, isMobile && styles.mobileContent]}>
+        {/* Navigation Bar */}
+        <View style={styles.navBar}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.navigate('Home')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.backBtnText}>← Back to Home</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.liveBadge}>
@@ -282,6 +367,28 @@ const styles = StyleSheet.create({
   mobileContent: {
     padding: space.md,
     paddingBottom: 96,
+  },
+  navBar: {
+    marginBottom: space.md,
+  },
+  backBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  backBtnText: {
+    fontSize: font.size.sm,
+    fontWeight: font.weight.semibold,
+    color: color.primary,
   },
   header: {
     backgroundColor: color.surface,

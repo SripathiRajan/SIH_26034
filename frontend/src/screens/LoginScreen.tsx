@@ -12,12 +12,11 @@ import {
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import DottedBackground from '../components/DottedBackground';
 import LogoHeader from '../components/LogoHeader';
-import RoleTabs from '../components/RoleTabs';
 import DemoBanner from '../components/DemoBanner';
 import CustomInput from '../components/CustomInput';
 import PrimaryButton from '../components/PrimaryButton';
 import { pramanColor, pramanFont, radius, shadow } from '../theme/tokens';
-import { UserRole, OfficerUser } from '../types';
+import { OfficerUser } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 interface Props {
@@ -45,11 +44,10 @@ function LockIcon({ color = pramanColor.mutedText }: { color?: string }) {
 
 export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
   const { login, loginDemo } = useAuth();
-  const [selectedRole, setSelectedRole] = useState<UserRole>('officer');
-  const [officerId, setOfficerId] = useState('admin');
+  const [userId, setUserId] = useState('admin');
   const [password, setPassword] = useState('Praman!2026');
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ officerId?: string; password?: string; form?: string }>({});
+  const [errors, setErrors] = useState<{ userId?: string; password?: string; form?: string }>({});
 
   // Fade-in animation for card
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -71,10 +69,10 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
   }, [fadeAnim, slideAnim]);
 
   const validateForm = () => {
-    const newErrors: { officerId?: string; password?: string } = {};
+    const newErrors: { userId?: string; password?: string } = {};
 
-    if (!officerId.trim()) {
-      newErrors.officerId = 'Officer ID / Badge Number is required';
+    if (!userId.trim()) {
+      newErrors.userId = 'User ID / Username is required';
     }
 
     if (!password.trim()) {
@@ -92,9 +90,7 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
     setErrors({});
 
     try {
-      // Real backend authentication — issues and persists a JWT.
-      // Role spoofing is impossible: the role comes from the server user record.
-      const res = await login(officerId.trim(), password);
+      const res = await login(userId.trim(), password);
       setIsLoading(false);
       if (!res.success) {
         setErrors({ form: res.error || 'Authentication failed' });
@@ -130,8 +126,11 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
             {/* Header with 80px Circular Logo & Project Name PRAMAN */}
             <LogoHeader />
 
-            {/* Role Selection Segmented Control */}
-            <RoleTabs selectedRole={selectedRole} onSelectRole={setSelectedRole} />
+            {/* Single Unified User Login Header */}
+            <View style={styles.userRoleBanner}>
+              <PersonIcon color={pramanColor.primaryBlue} />
+              <Text style={styles.userRoleBannerText}>User Login</Text>
+            </View>
 
             {/* 1-Click Demo Entry (No Sign-In Required) */}
             <TouchableOpacity
@@ -144,13 +143,12 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
               <Text style={styles.directDemoButtonText}>⚡ Explore Full Demo (No Sign-In Required)</Text>
             </TouchableOpacity>
 
-            {/* Preset Admin Credentials Callout */}
+            {/* Preset Demo Credentials Callout */}
             <TouchableOpacity
               style={styles.credentialsBadge}
               onPress={() => {
-                setOfficerId('admin');
+                setUserId('admin');
                 setPassword('Praman!2026');
-                setSelectedRole('admin');
               }}
               activeOpacity={0.8}
             >
@@ -163,19 +161,19 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
               </Text>
             </TouchableOpacity>
 
-            {/* Input 1: Officer ID / Badge Number */}
+            {/* Input 1: User ID / Username */}
             <CustomInput
-              label="Officer ID / Badge Number"
-              placeholder="OFF-2601"
-              value={officerId}
+              label="User ID / Username"
+              placeholder="admin"
+              value={userId}
               onChangeText={(text) => {
-                setOfficerId(text);
-                if (errors.officerId) setErrors((prev) => ({ ...prev, officerId: undefined }));
+                setUserId(text);
+                if (errors.userId) setErrors((prev) => ({ ...prev, userId: undefined }));
               }}
-              error={errors.officerId}
+              error={errors.userId}
               isRequired
-              icon={<PersonIcon color={officerId ? pramanColor.primaryBlue : pramanColor.mutedText} />}
-              autoCapitalize="characters"
+              icon={<PersonIcon color={userId ? pramanColor.primaryBlue : pramanColor.mutedText} />}
+              autoCapitalize="none"
               autoCorrect={false}
             />
 
@@ -268,6 +266,26 @@ const styles = StyleSheet.create({
     borderColor: pramanColor.borderColor,
     padding: 28,
     ...shadow.lg,
+  },
+  userRoleBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  userRoleBannerText: {
+    fontFamily: pramanFont.heading,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3730A3',
+    letterSpacing: 0.3,
   },
   formErrorText: {
     fontFamily: pramanFont.body,

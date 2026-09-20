@@ -224,7 +224,7 @@ export default function ResultScreen({ navigation, route }: Props) {
       <View style={styles.navHeader}>
         <TouchableOpacity onPress={() => navigation.navigate('Home')} style={styles.backBtn} activeOpacity={0.7}>
           <BackIcon col={color.primary} size={14} />
-          <Text style={styles.backBtnText}>Back to Overview</Text>
+          <Text style={styles.backBtnText}>Back to Home</Text>
         </TouchableOpacity>
       </View>
 
