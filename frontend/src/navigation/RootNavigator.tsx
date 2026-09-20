@@ -236,7 +236,7 @@ export default function RootNavigator() {
         {/* Main Stack Navigation */}
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Home" component={MainTabNavigator} />
-          <Stack.Screen name="Capture" component={CaptureScreen} />
+          <Stack.Screen name="Capture" component={MainTabNavigator} />
           <Stack.Screen name="Processing" component={ProcessingScreen} />
           <Stack.Screen name="Result" component={ResultScreen} />
           <Stack.Screen name="History" component={HistoryScreen} />

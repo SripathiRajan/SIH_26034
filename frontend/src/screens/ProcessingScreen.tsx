@@ -203,7 +203,7 @@ export default function ProcessingScreen({ navigation, route }: Props) {
             <Text style={styles.errorMessage}>{error}</Text>
             <TouchableOpacity
               style={styles.returnBtn}
-              onPress={() => navigation.navigate('Capture')}
+              onPress={() => navigation.navigate('Home')}
             >
               <Text style={styles.returnBtnText}>Return to Scanner</Text>
             </TouchableOpacity>

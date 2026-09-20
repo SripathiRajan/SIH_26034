@@ -393,12 +393,12 @@ async def process_session_views(
 @router.post("/api/scan/session/{session_id}/finalize")
 async def finalize_scan_session(
     session_id: str,
-    user=Depends(require_current_user),
+    user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Finalizes an active multi-angle scan session:
-    - Requires authenticated inspector (require_current_user).
+    - Supports authenticated inspector or anonymous/demo inspection (get_current_user).
     - Merges all captured views into a single unified compliance report.
     - Persists exactly ONE ScanRecordDB in the database.
     - Returns the standard ScanRecord contract plus facesScanned and imageUris.

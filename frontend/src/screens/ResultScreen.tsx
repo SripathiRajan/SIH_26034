@@ -159,7 +159,7 @@ export default function ResultScreen({ navigation, route }: Props) {
           </Text>
           <TouchableOpacity
             style={[styles.backBtn, { backgroundColor: color.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 }]}
-            onPress={() => navigation.navigate('Capture')}
+            onPress={() => navigation.navigate('Home')}
           >
             <Text style={[styles.backBtnText, { color: '#FFFFFF' }]}>Start New Inspection</Text>
           </TouchableOpacity>
@@ -476,7 +476,7 @@ export default function ResultScreen({ navigation, route }: Props) {
 
         <TouchableOpacity
           style={styles.secondaryActionBtn}
-          onPress={() => navigation.navigate('Capture')}
+          onPress={() => navigation.navigate('Home')}
           activeOpacity={0.8}
         >
           <Text style={styles.secondaryActionText}>Inspect Another Label</Text>

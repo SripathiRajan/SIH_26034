@@ -69,6 +69,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginDemo = async () => {
+    try {
+      const res = await api.login('admin', 'Praman!2026');
+      if (res.success && res.user) {
+        setCurrentUser(res.user);
+        if (res.token) {
+          setToken(res.token);
+          api.setAuthToken(res.token);
+          await appStorage.setItem(AUTH_TOKEN_KEY, res.token);
+        }
+        await appStorage.setItem(AUTH_USER_KEY, JSON.stringify(res.user));
+        return;
+      }
+    } catch {
+      // Backend offline or unreachable — continue with local demo officer
+    }
+
     const demoOfficer: OfficerUser = {
       id: 'officer-demo',
       name: 'Insp. R. Sharma',

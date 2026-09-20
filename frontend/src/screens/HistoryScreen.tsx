@@ -194,7 +194,7 @@ export default function HistoryScreen({ navigation }: Props) {
           )}
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() => navigation.navigate('Capture')}
+            onPress={() => navigation.navigate('Home')}
             activeOpacity={0.85}
           >
             <PlusIcon size={14} color="#FFFFFF" />
