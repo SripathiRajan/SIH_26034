@@ -240,7 +240,21 @@ export default function CaptureScreen({ navigation }: Props) {
       setCapturedViews((prev) => prev.map((v) => ({ ...v, analyzed: true })));
     } catch (err: any) {
       console.warn('[CaptureScreen] scanSession error:', err);
-      if (DEMO_MODE) {
+      if (err?.code === 'MULTIPLE_PRODUCTS') {
+        // The backend rejected and discarded this session: the batch contains
+        // photos of more than one product. Keep the photos in the cart so the
+        // officer can remove the other product's shots and re-analyze.
+        setSessionId(null);
+        setMergedCoverage(null);
+        setCoverageFields(null);
+        setCapturedViews((prev) => prev.map((v) => ({ ...v, analyzed: false })));
+        setAnalysisError(err?.message || 'Photos of different products were uploaded in one batch.');
+        Alert.alert(
+          'Different Products Detected',
+          err?.message ||
+            'The uploaded photos appear to belong to more than one product. Remove the other product\'s photos and scan each product as a separate session.'
+        );
+      } else if (DEMO_MODE) {
         const demoSessId = sessionId || `demo-sess-${Date.now()}`;
         setSessionId(demoSessId);
         const isSecondBatch = capturedViews.length >= 2;

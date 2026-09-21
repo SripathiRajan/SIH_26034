@@ -21,6 +21,26 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Extracts a human-readable message from a FastAPI error body, which may be
+ * {"detail": "string"}, {"detail": {code, message, ...}} or a validation array.
+ */
+function extractHttpErrorMessage(status: number, errorText: string): string {
+  let detail: any = null;
+  try {
+    detail = JSON.parse(errorText)?.detail ?? null;
+  } catch {
+    // Plain-text error body
+  }
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (detail && typeof detail === 'object' && typeof detail.message === 'string') return detail.message;
+  if (Array.isArray(detail)) {
+    const joined = detail.map((e: any) => e?.msg || '').filter(Boolean).join(', ');
+    if (joined) return joined;
+  }
+  return `Request failed (HTTP ${status}): ${errorText || 'Server error'}`;
+}
+
 class ApiClient {
   private baseUrl: string = API_CONFIG.BASE_URL;
   private authToken: string | null = null;
@@ -413,8 +433,12 @@ class ApiClient {
         const errorText = await response.text().catch(() => '');
         console.warn(`[ApiClient] scanSession error HTTP ${response.status}: ${errorText}`);
         throw new ApiError(
-          response.status === 404 ? 'SESSION_NOT_FOUND' : 'SCAN_SESSION_FAILED',
-          `Multi-angle scan failed (HTTP ${response.status}): ${errorText || 'Server error'}`
+          response.status === 404
+            ? 'SESSION_NOT_FOUND'
+            : response.status === 409
+              ? 'MULTIPLE_PRODUCTS'
+              : 'SCAN_SESSION_FAILED',
+          extractHttpErrorMessage(response.status, errorText)
         );
       }
     } catch (err: any) {
@@ -464,8 +488,12 @@ class ApiClient {
         const errorText = await response.text().catch(() => '');
         console.warn(`[ApiClient] finalizeSession error HTTP ${response.status}: ${errorText}`);
         throw new ApiError(
-          response.status === 404 ? 'NOT_FOUND' : 'FINALIZE_FAILED',
-          `Failed to finalize session (HTTP ${response.status}): ${errorText || 'Server error'}`
+          response.status === 404
+            ? 'NOT_FOUND'
+            : response.status === 409
+              ? 'MULTIPLE_PRODUCTS'
+              : 'FINALIZE_FAILED',
+          extractHttpErrorMessage(response.status, errorText)
         );
       }
     } catch (err: any) {

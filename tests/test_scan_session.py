@@ -458,3 +458,154 @@ def test_merge_correctness_field_missing_view1_found_view2(client, monkeypatch):
     assert data2["fields"]["mrp"]["value"] == "Rs. 95.00"
     assert data2["fields"]["net_quantity"]["found"] is True
     assert data2["fields"]["net_quantity"]["value"] == "250 g"
+
+
+# =============================================================================
+# 7. Mixed-Product Detection Tests
+# =============================================================================
+
+from api.product_grouping import detect_mixed_products, parse_net_quantity
+
+GTIN_A = "8901234567890"  # valid EAN-13 check digit
+GTIN_B = "8901234567814"  # valid EAN-13 check digit
+
+
+def _report(fields: dict, tokens: list) -> dict:
+    return {"fields": fields, "raw_ocr_tokens": tokens, "full_text": ""}
+
+
+def test_parse_net_quantity_units():
+    assert parse_net_quantity("500 g") == ("mass", 500.0)
+    assert parse_net_quantity("1 kg") == ("mass", 1000.0)
+    assert parse_net_quantity("1.5 L") == ("volume", 1500.0)
+    assert parse_net_quantity("250 ml") == ("volume", 250.0)
+    assert parse_net_quantity("no quantity here") is None
+    assert parse_net_quantity(None) is None
+
+
+def test_detect_mixed_products_distinct_gtins():
+    reports = [
+        _report({}, [f"MRP Rs 50 BARCODE {GTIN_A}"]),
+        _report({}, [f"NET WT 100 g {GTIN_A}"]),
+        _report({}, [f"BARCODE {GTIN_B}"]),
+    ]
+    conflict = detect_mixed_products(reports)
+    assert conflict is not None
+    assert conflict["rule"] == "distinct_gtin"
+    assert conflict["product_count"] == 2
+    views = {e["value"]: e["view_numbers"] for e in conflict["evidence"]}
+    assert views[GTIN_A] == [1, 2]
+    assert views[GTIN_B] == [3]
+
+
+def test_detect_mixed_products_conflicting_net_quantity():
+    reports = [
+        _report({"net_quantity": {"found": True, "value": "500 g"}}, []),
+        _report({"net_quantity": {"found": True, "value": "200 ml"}}, []),
+    ]
+    conflict = detect_mixed_products(reports)
+    assert conflict is not None
+    assert conflict["rule"] == "conflicting_net_quantity"
+
+
+def test_detect_mixed_products_same_product_not_flagged():
+    # Same GTIN + identical net quantity on every view is one product.
+    reports = [
+        _report({"net_quantity": {"found": True, "value": "500 g"}}, [GTIN_A]),
+        _report({"net_quantity": {"found": True, "value": "500 g"}}, [GTIN_A]),
+    ]
+    assert detect_mixed_products(reports) is None
+    # A single view can never be mixed.
+    assert detect_mixed_products(reports[:1]) is None
+    # No signals at all -> no definitive evidence, stay permissive.
+    assert detect_mixed_products([_report({}, []), _report({}, [])]) is None
+
+
+def test_upload_rejects_two_products_in_one_batch(client, monkeypatch):
+    """
+    - Upload 2 views of DIFFERENT products in one batch -> HTTP 409
+      with MULTIPLE_PRODUCTS_DETECTED, and the session is discarded.
+    """
+    # Sequential OCR guarantees call order matches upload order.
+    calls = {"count": 0}
+
+    def mock_scan(path, **kw):
+        calls["count"] += 1
+        return _report({}, [GTIN_A] if calls["count"] == 1 else [GTIN_B])
+
+    monkeypatch.setattr(scan_session_module, "ensemble_scan", mock_scan)
+
+    img = _create_test_image("Mixed Product Batch")
+    resp = client.post(
+        "/api/scan/session",
+        files=[
+            ("images", ("product_a_front.jpg", img, "image/jpeg")),
+            ("images", ("product_b_front.jpg", img, "image/jpeg")),
+        ],
+    )
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert detail["code"] == "MULTIPLE_PRODUCTS_DETECTED"
+    assert detail["rule"] == "distinct_gtin"
+    assert "different products" in detail["message"]
+
+
+def test_upload_rejects_second_product_added_to_session(client, monkeypatch):
+    """
+    - Upload a first product's view (200).
+    - Add a different product's view to the same session -> HTTP 409,
+      because one session must only ever contain one product.
+    """
+    img = _create_test_image("Sequential Mixed Upload")
+
+    def mock_scan(path, **kw):
+        calls = getattr(mock_scan, "calls", 0) + 1
+        mock_scan.calls = calls
+        return _report({}, [GTIN_A] if calls == 1 else [GTIN_B])
+
+    monkeypatch.setattr(scan_session_module, "ensemble_scan", mock_scan)
+
+    resp1 = client.post(
+        "/api/scan/session",
+        files=[("images", ("front.jpg", img, "image/jpeg"))],
+    )
+    assert resp1.status_code == 200
+    session_id = resp1.json()["sessionId"]
+
+    resp2 = client.post(
+        "/api/scan/session",
+        files=[("images", ("back.jpg", img, "image/jpeg"))],
+        data={"session_id": session_id},
+    )
+    assert resp2.status_code == 409
+    assert resp2.json()["detail"]["code"] == "MULTIPLE_PRODUCTS_DETECTED"
+    # The conflicting session was discarded server-side.
+    assert session_store.get(session_id) is None
+
+
+def test_upload_allows_two_views_of_same_product(client, monkeypatch):
+    """
+    - Two views sharing one GTIN and one net quantity are a valid
+      multi-angle session and must NOT be rejected.
+    """
+    img = _create_test_image("Same Product Views")
+
+    def mock_scan(path, **kw):
+        return _report(
+            {"net_quantity": {"found": True, "value": "500 g", "confidence": 0.9,
+                              "label": "Net Quantity", "rule": "LM Rule §6(1)(c)",
+                              "source": "paddleocr"}},
+            [GTIN_A],
+        )
+
+    monkeypatch.setattr(scan_session_module, "ensemble_scan", mock_scan)
+
+    resp = client.post(
+        "/api/scan/session",
+        files=[
+            ("images", ("front.jpg", img, "image/jpeg")),
+            ("images", ("back.jpg", img, "image/jpeg")),
+        ],
+    )
+    assert resp.status_code == 200
+    assert resp.json()["viewsCaptured"] == 2

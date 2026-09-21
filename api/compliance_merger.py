@@ -46,6 +46,9 @@ def merge_package_faces(
     merged_fields: Dict[str, Dict[str, Any]] = {}
     faces_scanned = []
     user_instructions = []
+    # Every distinct declared value per field, so disagreements between faces
+    # stay visible instead of being silently settled by confidence order.
+    value_provenance: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
     for face in face_results:
         label = face.get("face_label", "unknown")
@@ -57,6 +60,14 @@ def merge_package_faces(
                     user_instructions.append(inst)
 
         fields = face.get("fields", {})
+        for field_name, f_data in fields.items():
+            if f_data.get("found", False) and f_data.get("value") is not None:
+                norm = normalize_str(f_data["value"])
+                if norm:
+                    value_provenance.setdefault(field_name, {})[norm] = {
+                        "value": f_data["value"],
+                        "face": label,
+                    }
         for field_name, f_data in fields.items():
             if field_name not in merged_fields:
                 merged_fields[field_name] = {
@@ -92,6 +103,12 @@ def merge_package_faces(
     found_count = sum(1 for v in merged_fields.values() if v.get("found", False))
     missing_fields = [v["label"] for v in merged_fields.values() if not v.get("found", False)]
     compliance_score = round((found_count / total_fields) * 100, 1) if total_fields else 0.0
+
+    field_conflicts = [
+        {"field": field_name, "values": list(distinct.values())}
+        for field_name, distinct in value_provenance.items()
+        if len(distinct) > 1
+    ]
 
     gtin_verification = {
         "gtin_provided": bool(gtin_data and gtin_data.get("found")),
@@ -158,6 +175,7 @@ def merge_package_faces(
         "missing_fields": missing_fields,
         "merged_fields": merged_fields,
         "fields": merged_fields,
+        "field_conflicts": field_conflicts,
         "user_instructions": active_instructions,
         "gtin_verification": gtin_verification
     }

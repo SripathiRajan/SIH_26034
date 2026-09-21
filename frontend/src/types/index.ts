@@ -52,6 +52,12 @@ export interface ScanRecord {
   fields: FieldCheck[];
   facesScanned?: string[];
   imageUris?: string[];
+  fieldConflicts?: FieldConflict[];
+}
+
+export interface FieldConflict {
+  field: string;
+  values: { value: string; face: string }[];
 }
 
 export interface MergedCoverage {
@@ -72,6 +78,7 @@ export interface SessionCoverageResponse {
     views?: any[];
   };
   fields: Record<string, any>;
+  fieldConflicts?: FieldConflict[];
 }
 
 export interface DailyCount {

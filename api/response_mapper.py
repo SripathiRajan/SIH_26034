@@ -162,4 +162,5 @@ def pipeline_report_to_scan_record(
         "ocrEnginesUsed":    engines_used,
         "fields":            field_checks,
         "gtin":              gtin_data.get("gtin") if gtin_data else None,
+        "fieldConflicts":    pipeline_report.get("field_conflicts", []),
     }

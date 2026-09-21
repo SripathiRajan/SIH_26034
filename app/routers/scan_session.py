@@ -33,6 +33,7 @@ from pipeline.field_rules import MANDATORY_FIELDS
 from api.compliance_merger import merge_package_faces
 from api.response_mapper import pipeline_report_to_scan_record
 import api.gtin_lookup as gtin_lookup
+from api.product_grouping import detect_mixed_products
 
 router = APIRouter(tags=["Multi-Angle Scan Sessions"])
 
@@ -308,6 +309,31 @@ async def process_session_views(
         )
         session.views.append(scan_view)
 
+    # 3.5 Reject batches that definitively contain more than one product:
+    # merging fields across different products would fabricate an inconsistent
+    # compliance record (one product's MRP next to another's expiry date).
+    mixed_products = detect_mixed_products([v.pipeline_report for v in session.views])
+    if mixed_products:
+        evidence_desc = "; ".join(
+            f"{e['signal']} {e['value']} (photo {', '.join(map(str, e['view_numbers']))})"
+            for e in mixed_products.get("evidence", [])
+        )
+        session_store.remove(session.session_id, delete_files=True)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MULTIPLE_PRODUCTS_DETECTED",
+                "message": (
+                    "The uploaded photos appear to belong to "
+                    f"{mixed_products.get('product_count', 2)} different products "
+                    f"({evidence_desc}). One inspection session can only cover one "
+                    "product — remove the other product's photos and scan each "
+                    "product as a separate session."
+                ),
+                **mixed_products,
+            },
+        )
+
     # 4. Merge all views accumulated in the session (auto-detect GTIN if absent)
     if not session.gtin:
         all_tokens = []
@@ -378,6 +404,7 @@ async def process_session_views(
         "mergedCoverage": merged_coverage,
         "quality": overall_quality,
         "fields": merged_fields,
+        "fieldConflicts": merged_report.get("field_conflicts", []),
     }
 
 
@@ -408,6 +435,24 @@ async def finalize_scan_session(
         raise HTTPException(
             status_code=400,
             detail="Cannot finalize session with 0 captured views."
+        )
+
+    # Defense-in-depth: the upload endpoint already rejects mixed-product
+    # batches, but a session must never finalize into a chimera record if one
+    # somehow slipped through (e.g. older in-flight session).
+    mixed_products = detect_mixed_products([v.pipeline_report for v in session.views])
+    if mixed_products:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MULTIPLE_PRODUCTS_DETECTED",
+                "message": (
+                    "This session contains photos of more than one product and "
+                    "cannot be finalized into a single compliance record. Discard "
+                    "the session and scan each product separately."
+                ),
+                **mixed_products,
+            },
         )
 
     # 1. Lookup GTIN data if present, or auto-detect from views
