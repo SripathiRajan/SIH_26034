@@ -143,23 +143,6 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
               <Text style={styles.directDemoButtonText}>⚡ Explore Full Demo (No Sign-In Required)</Text>
             </TouchableOpacity>
 
-            {/* Preset Demo Credentials Callout */}
-            <TouchableOpacity
-              style={styles.credentialsBadge}
-              onPress={() => {
-                setUserId('admin');
-                setPassword('Praman!2026');
-              }}
-              activeOpacity={0.8}
-            >
-              <View style={styles.badgeHeaderRow}>
-                <Text style={styles.badgeTitle}>🔐 Preset Demo Credentials</Text>
-                <Text style={styles.badgeAutoFill}>Tap to Auto-Fill</Text>
-              </View>
-              <Text style={styles.badgeDetails}>
-                Username: <Text style={styles.badgeBold}>admin</Text>   |   Password: <Text style={styles.badgeBold}>Praman!2026</Text>
-              </Text>
-            </TouchableOpacity>
 
             {/* Input 1: User ID / Username */}
             <CustomInput
@@ -228,17 +211,6 @@ export default function LoginScreen({ onLogin, onNavigateToSignup }: Props) {
               </TouchableOpacity>
             </View>
 
-            {/* Fast Demo Access */}
-            <View style={styles.demoRow}>
-              <TouchableOpacity
-                onPress={async () => {
-                  await loginDemo();
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.demoLink}>⚡ Or test directly in Offline Demo Mode</Text>
-              </TouchableOpacity>
-            </View>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>

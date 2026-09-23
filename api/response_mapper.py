@@ -23,7 +23,8 @@ COLOR_MAP = {
 
 SOURCE_DISPLAY = {
     "paddle": "paddleocr", "easyocr": "easyocr",
-    "surya": "suryaocr",   "vlm": "florence2", "ensemble": "paddleocr"
+    "surya": "suryaocr",   "vlm": "florence2", "ensemble": "paddleocr",
+    "ai_vision": "ai_vision",
 }
 
 IST = timezone(timedelta(hours=5, minutes=30))

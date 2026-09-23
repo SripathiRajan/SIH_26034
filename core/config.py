@@ -55,6 +55,10 @@ VLM_MODEL_ID = "microsoft/Florence-2-base"
 VLM_TARGET_DIM = 768
 VLM_MAX_NEW_TOKENS = 128
 
+# Multimodal AI Vision Backup settings
+ENABLE_AI_VISION_BACKUP = os.environ.get("ENABLE_AI_VISION_BACKUP", "true").lower() in ("1", "true", "yes")
+AI_VISION_MODEL = os.environ.get("AI_VISION_MODEL", "qwen/qwen3.8-27b")
+
 # Compliance & GTIN Matching
 COMPLIANCE_PASS_THRESHOLD = 85.0
 

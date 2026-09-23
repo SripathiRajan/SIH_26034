@@ -11,6 +11,7 @@ from ocr.paddle_engine import run_paddle_ocr
 from ocr.easyocr_engine import run_easyocr
 from ocr.surya_engine import run_surya_ocr
 from ocr.vlm_engine import run_vlm_ocr
+from ocr.ai_vision_engine import run_ai_vision_ocr
 from pipeline.field_rules import MANDATORY_FIELDS, VLM_CRITICAL_FIELDS
 from pipeline.field_extractor import extract_fields
 from pipeline.compliance_engine import generate_compliance_report
@@ -185,24 +186,32 @@ def ensemble_scan(
                 except Exception:
                     pass
 
-        # ── Stage 3: Tier 3 VLM (auto-triggered if ANY field is missing) ─
+        # ── Stage 3: Tier 3 Local VLM Fallback ───────────────────────────
         fields_s3, _, flap_s3 = extract_fields(all_results)
         any_missing = get_unaccounted_fields(fields_s3, flap_s3)
-        if any_missing and not session_mode:
-            logger.info(f"  Stage 3: VLM fallback auto-triggered — {len(any_missing)} field(s) still missing: {any_missing}")
+        if any_missing and not session_mode and enable_vlm_fallback:
+            logger.info(f"  Stage 3: Local VLM fallback triggered — {len(any_missing)} field(s) still missing: {any_missing}")
             try:
                 vlm_res = run_vlm_ocr(active_path)
                 logger.info(f"  ✓ Florence-2 VLM: {len(vlm_res)} regions added")
                 all_results.extend(vlm_res)
             except Exception as e:
                 logger.warning(f"  Florence-2 VLM fallback skipped/failed: {e}")
-        elif any_missing and enable_vlm_fallback:
-            logger.info(f"  Stage 3 (session): VLM fallback for {any_missing}")
+
+        # ── Stage 3.5: Multimodal AI Vision Backup (Groq Qwen Vision / Gemini) ──
+        # Guarantees zero failures: triggers if local OCR engines returned 0 results
+        # or if any statutory mandatory declarations are still missing.
+        fields_s35, _, flap_s35 = extract_fields(all_results)
+        unaccounted_s35 = get_unaccounted_fields(fields_s35, flap_s35)
+        if unaccounted_s35 or len(all_results) == 0:
+            logger.info(f"  Stage 3.5: AI Vision Model backup triggered ({len(unaccounted_s35)} missing fields, raw regions: {len(all_results)})")
             try:
-                vlm_res = run_vlm_ocr(active_path)
-                all_results.extend(vlm_res)
+                ai_vision_res = run_ai_vision_ocr(active_path, missing_fields=unaccounted_s35)
+                if ai_vision_res:
+                    logger.info(f"  ✓ AI Vision Model backup: {len(ai_vision_res)} regions recovered")
+                    all_results.extend(ai_vision_res)
             except Exception as e:
-                logger.warning(f"  Florence-2 VLM fallback skipped/failed: {e}")
+                logger.warning(f"  AI Vision Model backup skipped/failed: {e}")
 
         # ── Stage 4: Geometric IoU spatial merge + reading order sort ─────
         merged = merge_and_sort(all_results, IOU_MERGE_THRESHOLD)
@@ -281,7 +290,8 @@ def save_annotated_image(image_path: str, all_results: List[Dict[str, Any]], rep
         "easyocr": (200, 140, 0),
         "surya": (0, 0, 220),
         "vlm": (180, 0, 180),
-        "ensemble": (0, 200, 0)
+        "ensemble": (0, 200, 0),
+        "ai_vision": (255, 105, 180),
     }
 
     for r in all_results:
