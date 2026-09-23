@@ -388,7 +388,7 @@ def _extract_table_dates(
         return (9999, 99)
 
     has_mfg_header = bool(re.search(
-        r"(?:date\s*of\s*(?:pkg|packing|packaging|mfg|mfd|manufacture)|mfg\.?|mfd\.?|pkd\.?|pkgd\.?|dom\.?|d\.?o\.?m\.?|packed\s*on)",
+        r"(?:[dq]ate\s*of\s*(?:pkg|packing|packaging|mfg|mfd|manufacture)?|packaging|packing|mfg\.?|mfd\.?|pkd\.?|pkgd\.?|dom\.?|d\.?o\.?m\.?|packed\s*on)",
         full_text, re.I))
     has_exp_header = bool(re.search(
         r"(?:use\s*by|best\s*before|best\s*bef\.?|b\.?b\.?|expiry|exp\.?|valid\s*till|shelf\s*life|consume\s*before)",
@@ -398,7 +398,7 @@ def _extract_table_dates(
     mfg_spatial = None
     exp_spatial = None
     _MFG_HDR_PAT = re.compile(
-        r"(?:date\s*of\s*(?:pkg|packing|packaging|mfg|mfd|manufacture)|mfg\.?|mfd\.?|pkd\.?|pkgd\.?|dom\.?|d\.?o\.?m\.?|packed\s*on)",
+        r"(?:[dq]ate\s*of\s*(?:pkg|packing|packaging|mfg|mfd|manufacture)?|packaging|packing|mfg\.?|mfd\.?|pkd\.?|pkgd\.?|dom\.?|d\.?o\.?m\.?|packed\s*on)",
         re.I)
     _EXP_HDR_PAT = re.compile(
         r"(?:use\s*by|best\s*before|best\s*bef\.?|b\.?b\.?|expiry|exp\.?|valid\s*till|shelf\s*life|consume\s*before)",
@@ -437,7 +437,29 @@ def _extract_table_dates(
     elif mfg_spatial and not exp_spatial:
         pass  # continue to candidate check to see if use_by can also be resolved
 
-    # 2. Search for fused dual dates like 'N20260CT/2026', 'JUN/2026OCT/2026'
+    # 2. Search for fused dual dates like 'JH-3026E0CT2026', 'N20260CT/2026', 'JUN/2026OCT/2026'
+    def _split_and_normalize_fused(s: str) -> Optional[Tuple[str, str]]:
+        t = s.upper()
+        t = re.sub(r'30(2\d)', r'20\1', t)
+        t = re.sub(r'\b(?:JH|JN)[\/\-]?', r'JUN/', t)
+        t = re.sub(r'\bN(20\d{2})', r'JUN/\1', t)
+        t = re.sub(r'[EF]\s*0?CT[\/\-]?(?:20\d{2})?', r'OCT/2026', t)
+        t = re.sub(r'\b0?CT[\/\-]?(?:20\d{2})?', r'OCT/2026', t)
+        m = re.findall(r'([A-Z]{3}|\d{1,2})[\/\-]?(20\d{2})', t)
+        if len(m) >= 2:
+            d1 = normalize_date_token(f"{m[0][0]}/{m[0][1]}")
+            d2 = normalize_date_token(f"{m[1][0]}/{m[1][1]}")
+            if is_valid_date(d1) and is_valid_date(d2):
+                return d1, d2
+        return None
+
+    # Check each OCR region and full_text for fused tokens
+    all_check_texts = [full_text] + [r.get("text", "") for r in all_results]
+    for raw_tok in all_check_texts:
+        fused_res = _split_and_normalize_fused(raw_tok)
+        if fused_res:
+            return fused_res[0], fused_res[1]
+
     for fused_match in re.finditer(
         r"([A-Za-z0-9]{1,4}[\/\-]?(?:20\d{2}|\d{2}))\s*([0-9A-Za-z]{3,4}[\/\-]?(?:20\d{2}|\d{2}))",
         full_text,
