@@ -25,8 +25,8 @@ const getBaseUrl = (): string => {
       /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
 
     if (isLocalOrLan) {
-      // Prioritize port 8001 / 8000 for local development
-      return `${protocol}//127.0.0.1:8001`;
+      // Prioritize port 8000 for local development
+      return `${protocol}//127.0.0.1:8000`;
     }
 
     // When hosted in Azure or other cloud environments:

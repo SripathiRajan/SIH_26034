@@ -25,25 +25,12 @@ async def lifespan(_app: FastAPI):
     create_tables()
     logger.info("✓ PRAMAN v4 database initialized")
 
-    if os.environ.get("PRAMAN_PRELOAD_MODELS", "1") != "0":
-        def _warmup_models():
-            # Sequential preload of every OCR engine. Lazy first-use inside worker
-            # threads crashes natively on Windows (OpenMP/DLL init race), and
-            # preloading also removes the multi-second first-scan latency spike.
-            # Set PRAMAN_PRELOAD_MODELS=0 to keep startup fast on constrained SKUs.
-            from core.models import registry
-            for name, getter in (
-                ("PaddleOCR (primary)", registry.get_paddle_ocr),
-                ("EasyOCR (tier 2)", registry.get_easyocr_reader),
-                ("SuryaOCR (tier 2)", registry.get_surya_detector),
-            ):
-                try:
-                    getter()
-                    logger.info(f"✓ {name} pre-warmed and ready in memory")
-                except Exception as e:
-                    logger.warning(f"Background model pre-warm note ({name}): {e}")
-
-        threading.Thread(target=_warmup_models, daemon=True).start()
+    from core.models import registry
+    try:
+        registry.get_paddle_ocr()
+        logger.info("✓ PaddleOCR (primary) pre-warmed and ready in memory")
+    except Exception as e:
+        logger.warning(f"PaddleOCR pre-warm note: {e}")
     yield
 
 
