@@ -18,7 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { DEMO_MODE } from '../api/config';
 import { api } from '../api/client';
 import { MergedCoverage } from '../types';
-import { captureFromDeviceCamera } from '../utils/webCameraHelper';
+import { captureFromDeviceCamera, compressImageFile } from '../utils/webCameraHelper';
 
 interface Props {
   navigation: any;
@@ -374,17 +374,16 @@ export default function HomeScreen({ navigation }: Props) {
     }
   };
 
-  // 3. Web multi-file input change handler
-  const handleMultiWebFileChange = (e: any) => {
+  // 3. Web multi-file input change handler (with client-side canvas compression to avoid OOM)
+  const handleMultiWebFileChange = async (e: any) => {
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files) as File[];
       const remaining = Math.max(0, 6 - photos.length);
       const filesToAdd = files.slice(0, remaining);
 
-      filesToAdd.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const uri = event.target?.result as string;
+      for (const file of filesToAdd) {
+        try {
+          const uri = await compressImageFile(file, 1600, 0.82);
           if (uri) {
             setPhotos((prev) => {
               if (prev.length >= 6) return prev;
@@ -394,9 +393,24 @@ export default function HomeScreen({ navigation }: Props) {
               ];
             });
           }
-        };
-        reader.readAsDataURL(file);
-      });
+        } catch (err) {
+          console.warn('[HomeScreen] Compress file fallback:', err);
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const uri = event.target?.result as string;
+            if (uri) {
+              setPhotos((prev) => {
+                if (prev.length >= 6) return prev;
+                return [
+                  ...prev,
+                  { id: `photo-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, uri, name: file.name },
+                ];
+              });
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      }
       setMergedCoverage(null);
       setCoverageFields(null);
       setScanSessionId(null);
