@@ -72,7 +72,7 @@ GEMINI_API_KEY = (
 # Groq LLM Integration (OpenAI-compatible endpoint, primary chatbot provider)
 # Reads GROQ_API_KEY from environment or .env securely without logging
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
 GROQ_API_BASE = os.environ.get("GROQ_API_BASE", "https://api.groq.com/openai/v1")
 
 # JWT Auth & Security

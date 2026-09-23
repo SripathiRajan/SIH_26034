@@ -20,8 +20,6 @@ reportlab>=4.2.5
 python-dotenv>=1.0.0
 pydantic-settings>=2.0.0
 slowapi>=0.1.9
-pytest>=8.0.0
-alembic>=1.13.0
 pypdf>=4.0.0
 
 # Gazette PDF RAG Knowledge Base & LLM

@@ -55,12 +55,40 @@ class ComplianceVectorStore:
             return results
 
         # Fallback keyword match
-        query_words = set(query.lower().split())
-        matched = []
+        import re
+        stop_words = {
+            "a", "an", "the", "in", "on", "at", "to", "for", "of", "and", "or", "is", "are",
+            "was", "were", "it", "this", "that", "what", "how", "why", "when", "can", "you",
+            "i", "me", "my", "hi", "hello", "hey", "please", "pls", "tell", "give", "do", "does",
+            "be", "we", "they", "them", "as", "by", "with", "from"
+        }
+        tokens = [w for w in re.findall(r'[a-zA-Z0-9]+', query.lower()) if len(w) > 2 and w not in stop_words]
+        if not tokens:
+            return []
+
+        scored_docs = []
         for doc in self._documents:
-            doc_text = doc.get("text", "").lower()
-            if any(w in doc_text for w in query_words):
-                matched.append(doc)
-            if len(matched) >= top_k:
-                break
-        return matched
+            doc_text = doc.get("text", "")
+            doc_lower = doc_text.lower()
+            doc_title = doc.get("title", "").lower()
+
+            # Detect Hindi / Devanagari characters
+            has_devanagari = bool(re.search(r'[\u0900-\u097F]', doc_text))
+
+            score = 0
+            for t in tokens:
+                pattern = r'\b' + re.escape(t) + r'\b'
+                matches = len(re.findall(pattern, doc_lower))
+                if matches:
+                    score += matches * 2
+                if re.search(pattern, doc_title):
+                    score += 5
+
+            if score > 0:
+                # Prioritize English text over Hindi text for standard English queries
+                if not has_devanagari:
+                    score += 10
+                scored_docs.append((score, doc))
+
+        scored_docs.sort(key=lambda x: x[0], reverse=True)
+        return [doc for _, doc in scored_docs[:top_k]]

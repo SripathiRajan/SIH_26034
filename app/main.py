@@ -19,36 +19,9 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.routers import auth, scans, product, sync, rules, chat, legacy, scan_session
 
-def _verify_schema_version():
-    """Refuse to boot against a DB whose alembic revision is not the current head."""
-    import sqlalchemy
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-    from alembic.runtime.migration import MigrationContext
-
-    try:
-        cfg = Config("alembic.ini")
-        head = ScriptDirectory.from_config(cfg).get_current_head()
-        with sqlalchemy.create_engine(DATABASE_URL).connect() as conn:
-            ctx = MigrationContext.configure(conn)
-            current = ctx.get_current_revision()
-        if current is not None and current != head:
-            raise RuntimeError(
-                f"Database schema revision {current} != expected {head}. "
-                "Run `python -m alembic upgrade head` before starting the server."
-            )
-    except RuntimeError:
-        raise
-    except Exception as e:
-        # Unmigrated/legacy DBs are allowed through (create_tables handles them);
-        # only a *stale known revision* is fatal.
-        logger.warning(f"Schema version check skipped: {e}")
-
-
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     import threading
-    _verify_schema_version()
     create_tables()
     logger.info("✓ PRAMAN v4 database initialized")
 

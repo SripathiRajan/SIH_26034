@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     GROQ_API_KEY: Optional[str] = None
     GROQ_MODEL: str = core_cfg.GROQ_MODEL
     GROQ_API_BASE: str = core_cfg.GROQ_API_BASE
-    LLM_TIMEOUT_SECONDS: float = 30.0
+    LLM_TIMEOUT_SECONDS: float = 10.0
 
 
 
