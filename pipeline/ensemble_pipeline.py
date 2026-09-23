@@ -108,6 +108,25 @@ def ensemble_scan(
                 logger.info(f"  Stage 1 found {found_t1}/{len(MANDATORY_FIELDS)} fields ({len(unaccounted_t1)} unaccounted). Proceeding with Tier 2 recovery.")
 
         if not skip_tier2:
+            # ── Stage 1.5: Fast AI Vision Recovery (Zero RAM overhead, ~2s latency) ──
+            # Runs first to resolve missing statutory fields without heavy CPU thrashing / OOM 502s
+            fields_t1, _, flap_t1 = extract_fields(all_results)
+            unaccounted_t1 = get_unaccounted_fields(fields_t1, flap_t1)
+            if unaccounted_t1:
+                try:
+                    logger.info(f"  Stage 1.5: Fast AI Vision recovery for {len(unaccounted_t1)} missing fields: {unaccounted_t1}")
+                    ai_vision_res = run_ai_vision_ocr(active_path, missing_fields=unaccounted_t1)
+                    if ai_vision_res:
+                        logger.info(f"  ✓ AI Vision recovered: {len(ai_vision_res)} regions")
+                        all_results.extend(ai_vision_res)
+                        fields_ai, _, flap_ai = extract_fields(all_results)
+                        if not get_unaccounted_fields(fields_ai, flap_ai):
+                            logger.info("  ✓ All fields recovered via AI Vision — skipping heavy Tier 2 CPU engines!")
+                            skip_tier2 = True
+                except Exception as e:
+                    logger.warning(f"  AI Vision fast recovery skipped: {e}")
+
+        if not skip_tier2:
             # ── Stage 2: Tier 2 EasyOCR + SuryaOCR (targeted recovery) ──────
             # Sequential on purpose: both engines are CPU-bound (OMP threads pinned to 1),
             # and parallel first-use lazy imports crash natively on Windows (OpenMP/DLL race).
