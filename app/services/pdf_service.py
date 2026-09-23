@@ -109,7 +109,7 @@ def generate_audit_pdf(scan_record) -> str:
     ft.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565C0")),
         ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-        ("ROWBACKGROUNDS", (1, 0), (-1, -1), [colors.white, colors.whitesmoke]),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.whitesmoke]),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("TOPPADDING", (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
