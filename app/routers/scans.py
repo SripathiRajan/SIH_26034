@@ -259,7 +259,11 @@ def update_scan_notes(
 
 @router.get("/api/scans/{scan_id}/pdf")
 @router.get("/api/scans/{scan_id}/report.pdf")
-def get_scan_pdf(scan_id: str, user=Depends(require_current_user), db: Session = Depends(get_db)):
+def get_scan_pdf(
+    scan_id: str,
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     from app.services.pdf_service import generate_audit_pdf
     record = db.query(ScanRecordDB).filter(ScanRecordDB.id == scan_id).first()
     if not record:
@@ -270,7 +274,10 @@ def get_scan_pdf(scan_id: str, user=Depends(require_current_user), db: Session =
         pdf_path,
         media_type="application/pdf",
         filename=f"praman_audit_{scan_id}.pdf",
-        headers={"Content-Disposition": f'attachment; filename="praman_audit_{scan_id}.pdf"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="praman_audit_{scan_id}.pdf"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
     )
 
 

@@ -227,13 +227,43 @@ function buildHtmlReport(scan: ScanRecord, officerName?: string): string {
 export async function exportReportAsPdf(scan: ScanRecord, officerName?: string): Promise<void> {
   if (Platform.OS === 'web') {
     const html = buildHtmlReport(scan, officerName);
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
-    if (printWindow) {
-      printWindow.document.write(html);
-      printWindow.document.close();
-      printWindow.focus();
+    try {
+      const printWindow = window.open('', '_blank', 'width=900,height=700');
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
+        return;
+      }
+    } catch (popupErr) {
+      console.warn('[reportExporter] window.open blocked, using iframe fallback:', popupErr);
+    }
+
+    // Hidden iframe fallback (triggers print dialog even when popup blockers block window.open)
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
       setTimeout(() => {
-        printWindow.print();
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 3000);
       }, 500);
     }
   } else {

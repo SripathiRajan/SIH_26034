@@ -796,7 +796,8 @@ class ApiClient {
    * Get direct download URL for generated PDF report.
    */
   public getPdfDownloadUrl(scanId: string): string {
-    return `${this.baseUrl}/api/scans/${scanId}/pdf`;
+    const token = this.token;
+    return `${this.baseUrl}/api/scans/${scanId}/pdf${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   }
 
   /**

@@ -179,7 +179,34 @@ export default function ResultScreen({ navigation, route }: Props) {
       if (scan.id && !scan.id.startsWith('demo-')) {
         const downloadUrl = api.getPdfDownloadUrl(scan.id);
         if (Platform.OS === 'web') {
-          window.open(downloadUrl, '_blank');
+          try {
+            // Direct blob download with auth headers (bypasses popup blockers)
+            const response = await fetch(downloadUrl, {
+              headers: api.getHeaders(),
+            });
+            if (response.ok) {
+              const blob = await response.blob();
+              const blobUrl = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = blobUrl;
+              a.download = `praman_audit_${scan.id}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+              return;
+            }
+          } catch (fetchErr) {
+            console.warn('[ResultScreen] Direct blob download failed, falling back:', fetchErr);
+          }
+          // Direct link fallback
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.target = '_blank';
+          a.download = `praman_audit_${scan.id}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
         } else {
           await Linking.openURL(downloadUrl);
         }
