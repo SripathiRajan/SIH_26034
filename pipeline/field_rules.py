@@ -34,8 +34,9 @@ MANDATORY_FIELDS = {
     "manufacture_date": {
         "label": "Month & Year of Manufacture",
         "pattern": re.compile(
-            r"(?:mfg\.?\s*date|manufactured\s*on|packed\s*on|date\s*of\s*(?:mfg|pkg|packing|packaging)\.?|dom|mfd|pkd(?:\s*on|\s*date)?)"
-            r"[ \t\:\-]*([a-z0-9]{2,}[\s\/\-]\d{2,4}|\d{1,2}[\/-]\d{2,4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\b\d{4}\b)",
+            r"(?:mfg\.?\s*(?:date)?|manufactured\s*(?:on|date)?|packed\s*(?:on|date)?|date\s*of\s*(?:mfg|pkg|packing|packaging)\.?|dom|mfd|pkd(?:\s*on|\s*date)?)"
+            r"[\s\:\.\-]*(?:[a-z0-9]{1,4}[\s\:\.\-]+)?"
+            r"([a-z0-9]{2,}[\s\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\b\d{4}\b)",
             re.IGNORECASE
         ),
         "rule": "LM Rule §6(1)(d) — Month and year of manufacture/packing"
@@ -43,8 +44,9 @@ MANDATORY_FIELDS = {
     "use_by": {
         "label": "Use By / Best Before / Expiry",
         "pattern": re.compile(
-            r"(?:use\s*by|best\s*before|expiry|exp\.?|expires?|bb\.?)[ \t\:\-]*"
-            r"([a-z0-9]{2,}[\s\/\-]\d{2,4}|\d{1,2}[\/-]\d{2,4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\w+\/\d{2,4}|"
+            r"(?:use\s*by|best\s*before|expiry(?:\s*date)?|exp\.?\s*(?:date)?|expires?|bb\.?|valid\s*till)[\s\:\.\-]*"
+            r"(?:[a-z0-9]{1,4}[\s\:\.\-]+)?"
+            r"([a-z0-9]{2,}[\s\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\w+\/\d{2,4}|"
             r"(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|eighteen|twenty\s*four|\d+)\s*(?:months?|days?|weeks?|years?)(?:\s+(?:from|of)\s+(?:pkg|mfg|packing|packaging|packging|manufacture|date))?))",
             re.IGNORECASE
         ),

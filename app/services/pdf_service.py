@@ -79,25 +79,40 @@ def generate_audit_pdf(scan_record) -> str:
     story.append(Paragraph("<b>Field Compliance Details</b>", styles["Heading2"]))
     fields = json.loads(scan_record.fields_json) if isinstance(scan_record.fields_json, str) else scan_record.fields_json
 
-    field_rows = [["Field", "Status", "Extracted Value", "Rule Reference", "Violation Reason"]]
+    from reportlab.lib.styles import ParagraphStyle
+    hdr_style = ParagraphStyle("HdrStyle", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.white, fontName="Helvetica-Bold")
+    cell_style = ParagraphStyle("CellText", parent=styles["Normal"], fontSize=8, leading=10)
+    pass_style = ParagraphStyle("PassStyle", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.HexColor("#2E7D32"), fontName="Helvetica-Bold")
+    fail_style = ParagraphStyle("FailStyle", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.HexColor("#C62828"), fontName="Helvetica-Bold")
+    warn_style = ParagraphStyle("WarnStyle", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.HexColor("#EF6C00"), fontName="Helvetica-Bold")
+
+    headers = ["Field", "Status", "Extracted Value", "Rule Reference", "Violation Reason"]
+    field_rows = [[Paragraph(h, hdr_style) for h in headers]]
     for f in (fields or []):
         status_str = f.get("status", "").upper()
+        if status_str == "PASS":
+            st_para = Paragraph("PASS", pass_style)
+        elif status_str == "FAIL":
+            st_para = Paragraph("FAIL", fail_style)
+        else:
+            st_para = Paragraph(status_str or "—", warn_style)
+
         field_rows.append([
-            f.get("label", ""),
-            status_str,
-            (f.get("extractedValue") or "—")[:40],
-            f.get("ruleRef", "")[:30],
-            (f.get("violationReason") or "—")[:50],
+            Paragraph(f.get("label", ""), cell_style),
+            st_para,
+            Paragraph(f.get("extractedValue") or "—", cell_style),
+            Paragraph(f.get("ruleRef", "") or "—", cell_style),
+            Paragraph(f.get("violationReason") or "—", cell_style),
         ])
 
-    ft = Table(field_rows, colWidths=[4 * cm, 2 * cm, 4 * cm, 3.5 * cm, 3.5 * cm])
+    ft = Table(field_rows, colWidths=[4 * cm, 1.8 * cm, 4.2 * cm, 3.5 * cm, 3.5 * cm])
     ft.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565C0")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
         ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
         ("ROWBACKGROUNDS", (1, 0), (-1, -1), [colors.white, colors.whitesmoke]),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
     story.append(ft)
     story.append(Spacer(1, 0.5 * cm))
