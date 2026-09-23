@@ -362,13 +362,69 @@ def _extract_table_dates(
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Extracts packaging date (manufacture_date) and use_by date from table/column layouts,
-    fused dot-matrix tokens (e.g. 'JUN/2026OCT/2026'), and nearby date tokens.
+    spatial column alignment, fused dot-matrix tokens (e.g. 'JUN/2026OCT/2026'), and nearby date tokens.
     Excludes FSSAI licenses (14 digits), phone numbers (10 digits), and postal PIN codes (6 digits).
     """
+    import numpy as np
+    MONTH_MAP = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6, 'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12}
+
+    def _box_center(b):
+        pts = np.array(b, dtype=np.float32)
+        return float(pts[:, 0].mean()), float(pts[:, 1].mean())
+
+    def _date_sort_key(d_str: str) -> Tuple[int, int]:
+        m = re.search(r"([a-z]{3})[\/\-\.](\d{2,4})", d_str, re.I)
+        if m:
+            mon = MONTH_MAP.get(m.group(1).lower(), 1)
+            yr = int(m.group(2))
+            yr = 2000 + yr if yr < 100 else yr
+            return (yr, mon)
+        m2 = re.search(r"(\d{1,2})[\/\-\.](\d{2,4})", d_str)
+        if m2:
+            mon = int(m2.group(1))
+            yr = int(m2.group(2))
+            yr = 2000 + yr if yr < 100 else yr
+            return (yr, mon)
+        return (9999, 99)
+
     has_mfg_header = bool(re.search(r"(?:date\s*of\s*(?:pkg|packing|packaging)|mfg|pkd|dom|packed)", full_text, re.I))
     has_exp_header = bool(re.search(r"(?:use\s*by|best\s*before|expiry|exp)", full_text, re.I))
 
-    # 1. Search for fused dual dates like 'N20260CT/2026', 'JUN/2026OCT/2026'
+    # 1. 2D Spatial Column Alignment: check if date tokens lie vertically below table headers
+    mfg_spatial = None
+    exp_spatial = None
+    mfg_header_boxes = [r.get("box") for r in all_results if r.get("box") and re.search(r"(?:date\s*of\s*(?:pkg|packing|packaging)|mfg|pkd|dom|packed)", r.get("text", ""), re.I)]
+    exp_header_boxes = [r.get("box") for r in all_results if r.get("box") and re.search(r"(?:use\s*by|best\s*before|expiry|exp)", r.get("text", ""), re.I)]
+
+    for r in all_results:
+        box = r.get("box")
+        if not box:
+            continue
+        cx, cy = _box_center(box)
+        t_raw = r.get("text", "").strip()
+        t_clean = re.sub(r"^[A-Za-z]\s+", "", t_raw).strip()
+        t_norm = normalize_date_token(t_clean)
+        if not is_valid_date(t_norm):
+            m_sub = re.search(r"([a-z0-9]{3,4}[\/\-.\s]*(?:20\d{2}|\d{2})|\d{1,2}[\/\-.\s]*(?:20\d{2}|\d{2}))", t_clean, re.I)
+            if m_sub:
+                t_norm = normalize_date_token(m_sub.group(1))
+
+        if is_valid_date(t_norm):
+            for m_box in mfg_header_boxes:
+                hx, hy = _box_center(m_box)
+                if abs(cx - hx) < 140 and 10 < (cy - hy) < 260:
+                    mfg_spatial = t_norm
+            for e_box in exp_header_boxes:
+                hx, hy = _box_center(e_box)
+                if abs(cx - hx) < 140 and 10 < (cy - hy) < 260:
+                    exp_spatial = t_norm
+
+    if mfg_spatial and exp_spatial and mfg_spatial != exp_spatial:
+        return mfg_spatial, exp_spatial
+    elif mfg_spatial and not exp_spatial:
+        pass  # continue to candidate check to see if use_by can also be resolved
+
+    # 2. Search for fused dual dates like 'N20260CT/2026', 'JUN/2026OCT/2026'
     for fused_match in re.finditer(
         r"([A-Za-z0-9]{1,4}[\/\-]?(?:20\d{2}|\d{2}))\s*([0-9A-Za-z]{3,4}[\/\-]?(?:20\d{2}|\d{2}))",
         full_text,
@@ -378,29 +434,26 @@ def _extract_table_dates(
         if is_valid_date(d1) and is_valid_date(d2):
             return d1, d2
 
-    # 2. Search for date candidates across full_text and all_results
+    # 3. Search for date candidates across full_text and all_results
     raw_texts = [full_text] + [r.get("text", "") for r in all_results]
     date_candidates: List[str] = []
     seen = set()
 
     for text in raw_texts:
-        # Strip out 14-digit FSSAI licenses, 10-digit phone numbers, and address PIN codes before searching
         clean_t = re.sub(r"\b(?:lic(?:\s*no\.?)?|fssai)?\s*[12]\d{13}\b", " ", text, flags=re.I)
         clean_t = re.sub(r"\b(?:\+?91[\s\-]?)?[6-9]\d{9}\b", " ", clean_t)
-        # Only strip 6-digit PIN if separated with space or in address context (e.g. '625 009')
-        clean_t = re.sub(r"\b[1-9]\d{2}\s+\d{3}\b", " ", clean_t)
+        clean_t = re.sub(r"\b[1-9]\d{2}\s*\d{3}\b", " ", clean_t)  # strip 6-digit postal PIN
 
         found = re.findall(
-            r"\b((?:0?[1-9]|[12]\d|3[01])[\/\-.](?:0?[1-9]|1[0-2])[\/\-.](?:20\d{2}|\d{2})|"
-            r"(?:0?[1-9]|1[0-2])[\/\-.](?:20\d{2}|\d{2})|"
-            r"[A-Za-z]{3}[\/\-.](?:20\d{2}|\d{2})|"
-            r"(?:0?[1-9]|[12]\d|3[01])[\/\-.][A-Za-z]{3}[\/\-.](?:20\d{2}|\d{2})|"
+            r"\b((?:0?[1-9]|[12]\d|3[01])[\/\-.\s]*(?:0?[1-9]|1[0-2]|[a-z0-9]{3,4})[\/\-.\s]*(?:20\d{2}|\d{2})|"
+            r"(?:0?[1-9]|1[0-2]|[a-z0-9]{3,4})[\/\-.\s]*(?:20\d{2}|\d{2})|"
             r"\b\d{6,8}\b)\b",
             clean_t,
             re.I
         )
         for f in found:
-            f_norm = normalize_date_token(f)
+            f_clean = re.sub(r"^[A-Za-z]\s+", "", f).strip()
+            f_norm = normalize_date_token(f_clean)
             if is_valid_date(f_norm) and f_norm.lower() not in seen:
                 seen.add(f_norm.lower())
                 if re.match(r"^\d{6}$", f_norm):
@@ -411,8 +464,20 @@ def _extract_table_dates(
                     f_norm = f"{f_norm[:2]}/{f_norm[2:4]}/{f_norm[4:]}"
                 date_candidates.append(f_norm)
 
+    if mfg_spatial and not exp_spatial:
+        other_candidates = [d for d in date_candidates if d != mfg_spatial]
+        if other_candidates:
+            return mfg_spatial, other_candidates[0]
+        return mfg_spatial, None
+    elif exp_spatial and not mfg_spatial:
+        other_candidates = [d for d in date_candidates if d != exp_spatial]
+        if other_candidates:
+            return other_candidates[0], exp_spatial
+        return None, exp_spatial
+
     if len(date_candidates) >= 2:
-        return date_candidates[0], date_candidates[1]
+        sorted_dates = sorted(date_candidates[:2], key=_date_sort_key)
+        return sorted_dates[0], sorted_dates[1]
     elif len(date_candidates) == 1:
         if exp_already_found and not mfg_already_found:
             return date_candidates[0], None
@@ -624,7 +689,12 @@ def extract_fields(all_results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], s
                     if len(digits) != 14:
                         raw_val = None
                 if field_key in {"manufacture_date", "use_by"} and raw_val:
+                    parsed = cb2_data.get("parsedValue")
+                    if isinstance(parsed, dict) and parsed.get("date_string"):
+                        raw_val = parsed["date_string"]
                     raw_val = normalize_date_token(raw_val)
+                    if not is_valid_date(raw_val):
+                        raw_val = None
 
             if cb2_data and cb2_data.get("found") and raw_val:
                 extracted[field_key] = _audit_field(

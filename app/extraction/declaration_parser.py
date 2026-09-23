@@ -50,7 +50,7 @@ class DeclarationExtractor:
             re.IGNORECASE,
         )
         self.standalone_date_pattern = re.compile(
-            r"\b([0-9]{1,2}[\/\-\.][0-9]{2,4})\b",
+            r"\b([0-9]{1,2}[\/\-\.][0-9]{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|0ct|1un)[a-z0-9]*[\s\.\,\-\/]+[0-9]{2,4})\b",
             re.IGNORECASE,
         )
         self.consumer_care_email_pattern = re.compile(
