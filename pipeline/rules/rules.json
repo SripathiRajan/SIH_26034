@@ -6,7 +6,7 @@
   "fields": {
     "net_quantity": {
       "label": "Net Quantity",
-      "rule_ref": "LM Rule §6(1)(c)",
+      "rule_ref": "Rule 6(1)(c)",
       "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(c)",
       "rule_explanation": "The net quantity must be declared in terms of the standard unit of weight or measure (g, kg, ml, l) or by number. Font size must be proportional to the principal display panel area (Schedule II).",
       "pass_condition": "Found with valid numeric value and standard unit",
@@ -16,7 +16,7 @@
     },
     "mrp": {
       "label": "Maximum Retail Price (MRP)",
-      "rule_ref": "LM Rule §6(1)(e)",
+      "rule_ref": "Rule 6(1)(e)",
       "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(e)",
       "rule_explanation": "MRP must be declared in Indian Rupees, inclusive of all taxes, and rounded to the nearest rupee or 50 paise. Unit Sale Price declaration additionally applies per the 2021 amendment (G.S.R. 779(E)).",
       "pass_condition": "MRP found with Rs./₹ symbol, numeric value, and 'inclusive of all taxes' wording",
@@ -26,7 +26,7 @@
     },
     "manufacturer": {
       "label": "Manufacturer / Packer Name & Address",
-      "rule_ref": "LM Rule §6(1)(a)",
+      "rule_ref": "Rule 6(1)(a)",
       "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(a)",
       "rule_explanation": "Complete name and address of the manufacturer (and packer, if different), or importer for imported packages, must appear on the package.",
       "pass_condition": "'Manufactured by', 'Packed by', 'Marketed by', or 'Imported by' found with name and address",
@@ -36,7 +36,7 @@
     },
     "manufacture_date": {
       "label": "Month & Year of Manufacture",
-      "rule_ref": "LM Rule §6(1)(d)",
+      "rule_ref": "Rule 6(1)(d)",
       "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(d)",
       "rule_explanation": "The month and year in which the commodity is manufactured or pre-packed (or imported) must be declared, e.g. MM/YYYY or 'Oct 2026'.",
       "pass_condition": "MFG date found in valid date format",
@@ -46,7 +46,7 @@
     },
     "use_by": {
       "label": "Best Before / Use By / Expiry Date",
-      "rule_ref": "LM Rule §6(1)(da)",
+      "rule_ref": "Rule 6(1)(da)",
       "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(da) (inserted by 2017 Amendment)",
       "rule_explanation": "For commodities that deteriorate (e.g. food), the 'best before' or 'use by' date, month and year must be declared on the label.",
       "pass_condition": "Expiry/BBD date found in valid format",
@@ -56,7 +56,7 @@
     },
     "consumer_care": {
       "label": "Consumer Care Details",
-      "rule_ref": "LM Rule §6(2)",
+      "rule_ref": "Rule 6(2)",
       "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(2) (inserted by 2017 Amendment, G.S.R. 629(E))",
       "rule_explanation": "Every package shall bear the name, address, telephone number and e-mail address of the person or office to be contacted in case of consumer complaints.",
       "pass_condition": "Phone number or email address found associated with consumer/customer/helpline keyword",
@@ -66,7 +66,7 @@
     },
     "fssai": {
       "label": "FSSAI License Number",
-      "rule_ref": "FSS (Labelling & Display) Reg. 2020 §2.1.1",
+      "rule_ref": "FSSAI Reg. 2020, Cl. 2.1.1",
       "rule_citation": "Food Safety and Standards (Labelling and Display) Regulations, 2020 — Clause 2.1.1",
       "rule_explanation": "Every pre-packaged food must carry the FSSAI logo and the 14-digit license/registration number of the manufacturer or brand owner.",
       "pass_condition": "14-digit FSSAI number found",
@@ -76,7 +76,7 @@
     },
     "country_of_origin": {
       "label": "Country of Origin",
-      "rule_ref": "LM Rule §6(1)(aa)",
+      "rule_ref": "Rule 6(1)(aa)",
       "rule_citation": "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6(1)(aa) (inserted by 2017 Amendment)",
       "rule_explanation": "For imported packages, the name of the country of origin or manufacture or assembly must be declared. Domestic manufacture may be evident from a complete Indian manufacturer address under Rule 6(1)(a).",
       "pass_condition": "'Made in', 'Manufactured in', 'Product of', 'Country of Origin' found, or Indian manufacturer address present",

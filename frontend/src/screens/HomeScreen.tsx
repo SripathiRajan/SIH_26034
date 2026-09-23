@@ -31,14 +31,14 @@ export interface PackagePhoto {
 }
 
 export const STATUTORY_DECLARATIONS = [
-  { key: 'net_quantity', label: 'Net Quantity', section: '§6(1)(c)' },
-  { key: 'mrp', label: 'MRP', section: '§6(1)(e)' },
-  { key: 'manufacturer', label: 'Manufacturer', section: '§6(1)(a)' },
-  { key: 'manufacture_date', label: 'Mfg Date', section: '§6(1)(d)' },
-  { key: 'use_by', label: 'Use By', section: '§6(1)(da)' },
-  { key: 'consumer_care', label: 'Helpline', section: '§6(2)' },
-  { key: 'fssai', label: 'FSSAI Lic.', section: 'FSS §2.1' },
-  { key: 'country_of_origin', label: 'Origin', section: '§6(1)(aa)' },
+  { key: 'net_quantity', label: 'Net Quantity', section: 'Rule 6(1)(c)' },
+  { key: 'mrp', label: 'MRP', section: 'Rule 6(1)(e)' },
+  { key: 'manufacturer', label: 'Manufacturer', section: 'Rule 6(1)(a)' },
+  { key: 'manufacture_date', label: 'Mfg Date', section: 'Rule 6(1)(d)' },
+  { key: 'use_by', label: 'Use By', section: 'Rule 6(1)(da)' },
+  { key: 'consumer_care', label: 'Helpline', section: 'Rule 6(2)' },
+  { key: 'fssai', label: 'FSSAI Lic.', section: 'FSSAI 2.1' },
+  { key: 'country_of_origin', label: 'Origin', section: 'Rule 6(1)(aa)' },
 ];
 
 /* Icons matching the mockup SVG definitions */

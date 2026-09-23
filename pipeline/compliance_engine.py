@@ -68,7 +68,7 @@ def generate_compliance_report(
             unit = unit_match.group(1) if unit_match else ""
             if unit and unit not in ALLOWED_METRIC_UNITS:
                 v["is_valid"] = False
-                v["violation_reason"] = f"Non-standard unit '{unit}' declared. Must use standard metric units (LM Rule §6(1)(c))"
+                v["violation_reason"] = f"Non-standard unit '{unit}' declared. Must use standard metric units (Rule 6(1)(c))"
                 violations.append({
                     "field": v["label"],
                     "rule_reference": v["rule"],
@@ -82,7 +82,7 @@ def generate_compliance_report(
             # Check for statutory 'inclusive of all taxes' declaration
             has_tax = bool(re.search(r"(?:incl\.?|inclusive)\s*(?:of\s*)?(?:all\s*)?taxes?", val_text, re.IGNORECASE))
             if not has_tax:
-                v["tax_inclusive_warning"] = "MRP declared without explicit '(inclusive of all taxes)' statement (LM Rule §6(1)(e))"
+                v["tax_inclusive_warning"] = "MRP declared without explicit '(inclusive of all taxes)' statement (Rule 6(1)(e))"
 
         if k not in review_keys:
             compliant_keys.append(k)

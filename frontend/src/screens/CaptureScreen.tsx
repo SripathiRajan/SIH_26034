@@ -71,14 +71,14 @@ function TrashIcon({ color: c = '#EF4444', size = 14 }: { color?: string; size?:
 }
 
 const STATUTORY_DECLARATIONS = [
-  { key: 'net_quantity', label: 'Net Quantity', section: '§6(1)(c)' },
-  { key: 'mrp', label: 'Maximum Retail Price (MRP)', section: '§6(1)(e)' },
-  { key: 'manufacturer', label: 'Manufacturer / Packer', section: '§6(1)(a)' },
-  { key: 'manufacture_date', label: 'Date of Mfg / Pkg', section: '§6(1)(d)' },
-  { key: 'use_by', label: 'Use By / Best Before', section: '§6(1)(da)' },
-  { key: 'consumer_care', label: 'Consumer Helpline', section: '§6(2)' },
-  { key: 'fssai', label: 'FSSAI License No.', section: 'FSS §2.1' },
-  { key: 'country_of_origin', label: 'Country of Origin', section: '§6(1)(aa)' },
+  { key: 'net_quantity', label: 'Net Quantity', section: 'Rule 6(1)(c)' },
+  { key: 'mrp', label: 'Maximum Retail Price (MRP)', section: 'Rule 6(1)(e)' },
+  { key: 'manufacturer', label: 'Manufacturer / Packer', section: 'Rule 6(1)(a)' },
+  { key: 'manufacture_date', label: 'Date of Mfg / Pkg', section: 'Rule 6(1)(d)' },
+  { key: 'use_by', label: 'Use By / Best Before', section: 'Rule 6(1)(da)' },
+  { key: 'consumer_care', label: 'Consumer Helpline', section: 'Rule 6(2)' },
+  { key: 'fssai', label: 'FSSAI License No.', section: 'FSSAI 2.1' },
+  { key: 'country_of_origin', label: 'Country of Origin', section: 'Rule 6(1)(aa)' },
 ];
 
 export default function CaptureScreen({ navigation }: Props) {

@@ -12,7 +12,7 @@ MANDATORY_FIELDS = {
             r"(?:net\s*(?:quantity|qty|wt\.?|weight)?)\s*[:\-]?\s*([^\n\r]{1,30}?)\s*(\d+[.,\d]*)\s*(g|gm|gms|g\.|kg|ml|l|ltr|litre|litres)\b)",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(c) — Net quantity mandatory in standard metric units"
+        "rule": "Rule 6(1)(c) — Net quantity mandatory in standard metric units"
     },
     "mrp": {
         "label": "Maximum Retail Price (MRP)",
@@ -21,7 +21,7 @@ MANDATORY_FIELDS = {
             r"[ \t\:\-\.]*(?:rs\.?|₹|\?|inr)?[ \t\:\-\.]*([\d,]+\.?\d{1,2}|[\d,]+)|(?:\b(?:rs\.?|inr)|₹)[ \t]*([\d,]+\.?\d{1,2}|[\d,]+)",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(e) — MRP inclusive of all taxes"
+        "rule": "Rule 6(1)(e) — MRP inclusive of all taxes"
     },
     "manufacturer": {
         "label": "Manufacturer / Packer Name & Address",
@@ -29,7 +29,7 @@ MANDATORY_FIELDS = {
             r"(?:manufactured(?:\s*&\s*marketed)?|marketed|packed|mfg|mfd)\s+by\s*[:\-]?\s*(.+?)(?:\n|lic|fssai|$)",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(a) — Name and address of manufacturer/packer/importer"
+        "rule": "Rule 6(1)(a) — Name and address of manufacturer/packer/importer"
     },
     "manufacture_date": {
         "label": "Month & Year of Manufacture",
@@ -39,7 +39,7 @@ MANDATORY_FIELDS = {
             r"([a-z0-9]{2,}[\s\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\b\d{4}\b)",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(d) — Month and year of manufacture/packing"
+        "rule": "Rule 6(1)(d) — Month and year of manufacture/packing"
     },
     "use_by": {
         "label": "Use By / Best Before / Expiry",
@@ -50,7 +50,7 @@ MANDATORY_FIELDS = {
             r"(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|eighteen|twenty\s*four|\d+)\s*(?:months?|days?|weeks?|years?)(?:\s+(?:from|of)\s+(?:pkg|mfg|packing|packaging|packging|manufacture|date))?))",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(da) — Best before / use by date"
+        "rule": "Rule 6(1)(da) — Best before / use by date"
     },
     "consumer_care": {
         "label": "Consumer Care Details",
@@ -59,7 +59,7 @@ MANDATORY_FIELDS = {
             r".{0,40}?(?:\+?91[\s\-]?\d[\d\s\-]{8,}|\d{10,}|\w+@[\w\.\-]+)",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(2) — Consumer care phone/email mandatory"
+        "rule": "Rule 6(2) — Consumer care phone/email mandatory"
     },
     "fssai": {
         "label": "FSSAI License Number",
@@ -67,7 +67,7 @@ MANDATORY_FIELDS = {
             r"(?:fssai|fsat|fssal|issai|lic(?:ense)?\.?\s*(?:no\.?)?|lic\s*#)[\s\S]{0,30}?[:\-]?\s*([0-9\s]{10,20})|\b([12]\d{13}|\d{14})\b",
             re.IGNORECASE
         ),
-        "rule": "FSS (Labelling and Display) Regulations 2020 §2.1.1"
+        "rule": "FSSAI Reg. 2020, Cl. 2.1.1 — Food safety license number"
     },
     "country_of_origin": {
         "label": "Country of Origin",
@@ -75,7 +75,7 @@ MANDATORY_FIELDS = {
             r"(?:country\s+of\s+origin|product\s+of|made\s+in|manufactured\s+in)\s*[:\-]?\s*([a-z]+)|(?:,\s*|\b)(india|bharat)\b",
             re.IGNORECASE
         ),
-        "rule": "LM Rule §6(1)(aa) — Country of origin declaration"
+        "rule": "Rule 6(1)(aa) — Country of origin declaration"
     },
 }
 
