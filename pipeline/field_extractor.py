@@ -387,14 +387,24 @@ def _extract_table_dates(
             return (yr, mon)
         return (9999, 99)
 
-    has_mfg_header = bool(re.search(r"(?:date\s*of\s*(?:pkg|packing|packaging)|mfg|pkd|dom|packed)", full_text, re.I))
-    has_exp_header = bool(re.search(r"(?:use\s*by|best\s*before|expiry|exp)", full_text, re.I))
+    has_mfg_header = bool(re.search(
+        r"(?:date\s*of\s*(?:pkg|packing|packaging|mfg|mfd|manufacture)|mfg\.?|mfd\.?|pkd\.?|pkgd\.?|dom\.?|d\.?o\.?m\.?|packed\s*on)",
+        full_text, re.I))
+    has_exp_header = bool(re.search(
+        r"(?:use\s*by|best\s*before|best\s*bef\.?|b\.?b\.?|expiry|exp\.?|valid\s*till|shelf\s*life|consume\s*before)",
+        full_text, re.I))
 
-    # 1. 2D Spatial Column Alignment: check if date tokens lie vertically below table headers
+    # 1. 2D Spatial Column Alignment: check if date tokens lie vertically below OR beside table headers
     mfg_spatial = None
     exp_spatial = None
-    mfg_header_boxes = [r.get("box") for r in all_results if r.get("box") and re.search(r"(?:date\s*of\s*(?:pkg|packing|packaging)|mfg|pkd|dom|packed)", r.get("text", ""), re.I)]
-    exp_header_boxes = [r.get("box") for r in all_results if r.get("box") and re.search(r"(?:use\s*by|best\s*before|expiry|exp)", r.get("text", ""), re.I)]
+    _MFG_HDR_PAT = re.compile(
+        r"(?:date\s*of\s*(?:pkg|packing|packaging|mfg|mfd|manufacture)|mfg\.?|mfd\.?|pkd\.?|pkgd\.?|dom\.?|d\.?o\.?m\.?|packed\s*on)",
+        re.I)
+    _EXP_HDR_PAT = re.compile(
+        r"(?:use\s*by|best\s*before|best\s*bef\.?|b\.?b\.?|expiry|exp\.?|valid\s*till|shelf\s*life|consume\s*before)",
+        re.I)
+    mfg_header_boxes = [r.get("box") for r in all_results if r.get("box") and _MFG_HDR_PAT.search(r.get("text", ""))]
+    exp_header_boxes = [r.get("box") for r in all_results if r.get("box") and _EXP_HDR_PAT.search(r.get("text", ""))]
 
     for r in all_results:
         box = r.get("box")
@@ -412,12 +422,15 @@ def _extract_table_dates(
         if is_valid_date(t_norm):
             for m_box in mfg_header_boxes:
                 hx, hy = _box_center(m_box)
-                if abs(cx - hx) < 140 and 10 < (cy - hy) < 260:
-                    mfg_spatial = t_norm
+                # Widened: 220px horizontal (was 140), allow same-line dates (cy-hy >= -30)
+                if abs(cx - hx) < 220 and -30 < (cy - hy) < 280:
+                    if mfg_spatial is None or float(r.get("confidence", 0)) > 0.7:
+                        mfg_spatial = t_norm
             for e_box in exp_header_boxes:
                 hx, hy = _box_center(e_box)
-                if abs(cx - hx) < 140 and 10 < (cy - hy) < 260:
-                    exp_spatial = t_norm
+                if abs(cx - hx) < 220 and -30 < (cy - hy) < 280:
+                    if exp_spatial is None or float(r.get("confidence", 0)) > 0.7:
+                        exp_spatial = t_norm
 
     if mfg_spatial and exp_spatial and mfg_spatial != exp_spatial:
         return mfg_spatial, exp_spatial
@@ -475,6 +488,30 @@ def _extract_table_dates(
             return other_candidates[0], exp_spatial
         return None, exp_spatial
 
+    # 3b. Inline keyword+date scan: catches 'MFG: 09/2026' on the same OCR line
+    # (When spatial alignment fails because header and date are on the same text region)
+    if not mfg_already_found:
+        inline_mfg = re.search(
+            r"(?:mfg\.?|mfd\.?|pkd\.?|pkgd\.?|dom\.?|date\s*of\s*(?:mfg|pkg|packing|packaging))\s*[:\-]?\s*"
+            r"([a-z]{2,9}[\/\- ][0-9]{2,4}|[0-9]{1,2}[\/\-][0-9]{2,4}|[0-9]{1,2}[\/\-][0-9]{1,2}[\/\-][0-9]{2,4})",
+            full_text, re.I
+        )
+        if inline_mfg:
+            candidate = normalize_date_token(inline_mfg.group(1))
+            if is_valid_date(candidate) and candidate not in date_candidates:
+                date_candidates.insert(0, candidate)
+
+    if not exp_already_found:
+        inline_exp = re.search(
+            r"(?:use\s*by|best\s*before|best\s*bef\.?|b\.?b\.?|expiry|exp\.?|valid\s*till)\s*[:\-]?\s*"
+            r"([a-z]{2,9}[\/\- ][0-9]{2,4}|[0-9]{1,2}[\/\-][0-9]{2,4}|[0-9]{1,2}[\/\-][0-9]{1,2}[\/\-][0-9]{2,4})",
+            full_text, re.I
+        )
+        if inline_exp:
+            candidate = normalize_date_token(inline_exp.group(1))
+            if is_valid_date(candidate) and candidate not in date_candidates:
+                date_candidates.append(candidate)
+
     if len(date_candidates) >= 2:
         sorted_dates = sorted(date_candidates[:2], key=_date_sort_key)
         return sorted_dates[0], sorted_dates[1]
@@ -483,6 +520,9 @@ def _extract_table_dates(
             return date_candidates[0], None
         elif mfg_already_found and not exp_already_found:
             return None, date_candidates[0]
+        elif has_mfg_header and has_exp_header:
+            # Both headers present, only one date found — can't reliably assign; return as mfg
+            return date_candidates[0], None
         elif has_mfg_header and not has_exp_header:
             return date_candidates[0], None
         elif has_exp_header and not has_mfg_header:

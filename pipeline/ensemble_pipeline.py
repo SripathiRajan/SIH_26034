@@ -19,8 +19,16 @@ from pipeline.compliance_engine import generate_compliance_report
 FLAP_TARGET_FIELDS = {"mrp", "manufacture_date", "use_by", "net_quantity"}
 
 FIELD_SEED_KEYWORDS: Dict[str, List[str]] = {
-    "manufacture_date": ["MFG", "MFD", "PKD", "PKGD", "DOM", "DATE OF PKG", "PACKING"],
-    "use_by": ["USE BY", "BEST BEFORE", "EXPIRY", "EXP", "BB"],
+    "manufacture_date": [
+        "MFG", "MFD", "PKD", "PKGD", "DOM", "DATE OF PKG", "PACKING",
+        "MFG DATE", "MFGDATE", "DATE OF MFG", "DATE OF PACKING",
+        "PKD ON", "PACKED ON", "MANUFACTURED ON", "D.O.M",
+    ],
+    "use_by": [
+        "USE BY", "BEST BEFORE", "EXPIRY", "EXP", "BB",
+        "BB DATE", "BEST BEF", "USE BY DATE", "EXP DATE",
+        "BEST BEFORE DATE", "SHELF LIFE", "VALID TILL", "CONSUME BEFORE",
+    ],
     "fssai": ["FSSAI", "LIC NO", "LIC. NO", "FSSAI LIC"],
     "mrp": ["MRP", "M.R.P", "MAX RETAIL", "MAXIMUM RETAIL"],
     "net_quantity": ["NET QTY", "NET WT", "NET WEIGHT", "NET CONTENT", "NET"],

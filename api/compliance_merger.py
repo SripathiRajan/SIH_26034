@@ -100,7 +100,11 @@ def merge_package_faces(
 
 
     total_fields = len(merged_fields)
-    found_count = sum(1 for v in merged_fields.values() if v.get("found", False))
+    # Exclude needs_review fields from compliant count to match compliance_engine.py single-scan path
+    found_count = sum(
+        1 for v in merged_fields.values()
+        if v.get("found", False) and not v.get("needs_review", False)
+    )
     missing_fields = [v["label"] for v in merged_fields.values() if not v.get("found", False)]
     compliance_score = round((found_count / total_fields) * 100, 1) if total_fields else 0.0
 

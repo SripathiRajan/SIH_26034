@@ -111,13 +111,18 @@ def _build_field_checks(fields: Dict) -> List[Dict]:
         else:
             violation = None
 
+        # Use a descriptive string for missing fields instead of None
+        extracted_value = data.get("value")
+        if not data.get("found") and not extracted_value:
+            extracted_value = "N/A"
+
         result.append({
             "label":           data.get("label", field_name),
             "fieldName":       field_name,
             "status":          fstatus,
-            "extractedValue":  data.get("value"),
-            "extractedText":   data.get("value"),
-            "confidence":      round(data.get("confidence", 0.0), 3),
+            "extractedValue":  extracted_value,
+            "extractedText":   extracted_value,
+            "confidence":      round(float(data.get("confidence") or 0.0), 3),
             "ruleRef":         data.get("rule", ""),
             "ruleCitation":    data.get("rule", ""),
             "ruleExplanation": data.get("rule", ""),

@@ -34,9 +34,28 @@ MANDATORY_FIELDS = {
     "manufacture_date": {
         "label": "Month & Year of Manufacture",
         "pattern": re.compile(
-            r"(?:mfg\.?\s*(?:date)?|manufactured\s*(?:on|date)?|packed\s*(?:on|date)?|date\s*of\s*(?:mfg|pkg|packing|packaging)\.?|dom|mfd|pkd(?:\s*on|\s*date)?)"
-            r"[\s\:\.\-]*(?:[a-z0-9]{1,4}[\s\:\.\-]+)?"
-            r"([a-z0-9]{2,}[\s\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\b\d{4}\b)",
+            # Primary: keyword prefix + optional intermediate tokens + date value
+            r"(?:"
+            r"mfg\.?\s*(?:date|dt)?"
+            r"|mfd\.?\s*(?:date|dt)?"
+            r"|mfgdate"
+            r"|manufactured\s*(?:on|date|dt)?"
+            r"|date\s*of\s*(?:mfg\.?|mfd\.?|manufacture|manufacturing|packaging|packing|pkg\.?|pkging)"
+            r"|packed\s*(?:on|date|dt)?"
+            r"|pkd\.?\s*(?:on|date|dt)?"
+            r"|pkgd\.?\s*(?:on|date|dt)?"
+            r"|dom\.?"
+            r"|d\.?o\.?m\.?"
+            r"|manufactured\s+and\s+packed\s+(?:on|by)?"
+            r")"
+            # Allow 0-3 intermediate tokens (e.g. 'SEP', ':', 'OF') before the date
+            r"[\s\:\.\-]*(?:[a-z0-9]{1,6}[\s\:\.\-]+){0,3}?"
+            r"("
+            r"[a-z]{3,9}[\s\/\-\.](?:20\d{2}|\d{2})"
+            r"|\d{1,2}[\s\/\-\.]\d{2,4}"
+            r"|\d{1,2}[\s\/\-\.]\d{1,2}[\s\/\-\.]\d{2,4}"
+            r"|\b\d{4}\b"
+            r")",
             re.IGNORECASE
         ),
         "rule": "Rule 6(1)(d) — Month and year of manufacture/packing"
@@ -44,10 +63,28 @@ MANDATORY_FIELDS = {
     "use_by": {
         "label": "Use By / Best Before / Expiry",
         "pattern": re.compile(
-            r"(?:use\s*by|best\s*before|expiry(?:\s*date)?|exp\.?\s*(?:date)?|expires?|bb\.?|valid\s*till)[\s\:\.\-]*"
-            r"(?:[a-z0-9]{1,4}[\s\:\.\-]+)?"
-            r"([a-z0-9]{2,}[\s\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\w+\/\d{2,4}|"
-            r"(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|eighteen|twenty\s*four|\d+)\s*(?:months?|days?|weeks?|years?)(?:\s+(?:from|of)\s+(?:pkg|mfg|packing|packaging|packging|manufacture|date))?))",
+            # Primary: keyword prefix + optional intermediate tokens + date value
+            r"(?:"
+            r"use\s*by(?:\s*date|\s*dt)?"
+            r"|best\s*before(?:\s*date|\s*dt)?"
+            r"|best\s*bef\.?(?:\s*date)?"
+            r"|b\.?b\.?(?:\s*date|\s*dt)?"
+            r"|expiry(?:\s*date|\s*dt)?"
+            r"|exp\.?(?:\s*date|\s*dt)?"
+            r"|expires?"
+            r"|valid\s*(?:till|upto|up\s*to)"
+            r"|shelf\s*life"
+            r"|consume\s*before"
+            r")"
+            # Allow 0-3 intermediate tokens before the date
+            r"[\s\:\.\-]*(?:[a-z0-9]{1,6}[\s\:\.\-]+){0,3}?"
+            r"("
+            r"[a-z]{3,9}[\s\/\-\.](?:20\d{2}|\d{2})"
+            r"|\d{1,2}[\s\/\-\.]\d{2,4}"
+            r"|\d{1,2}[\s\/\-\.]\d{1,2}[\s\/\-\.]\d{2,4}"
+            r"|\w+\/\d{2,4}"
+            r"|(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|eighteen|twenty\s*four|\d+)\s*(?:months?|days?|weeks?|years?)(?:\s+(?:from|of)\s+(?:pkg|mfg|packing|packaging|manufacture|date))?)"
+            r")",
             re.IGNORECASE
         ),
         "rule": "Rule 6(1)(da) — Best before / use by date"
